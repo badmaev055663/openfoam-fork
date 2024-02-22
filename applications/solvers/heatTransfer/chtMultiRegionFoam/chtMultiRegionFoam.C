@@ -53,6 +53,7 @@ Description
 #include "coordinateSystem.H"
 #include "loopControl.H"
 #include "pressureControl.H"
+#include "omp.h"
 
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
@@ -111,22 +112,26 @@ int main(int argc, char *argv[])
         {
             const bool finalIter = (oCorr == nOuterCorr-1);
 
-            forAll(fluidRegions, i)
+            #pragma omp parallel sections
             {
-                fvMesh& mesh = fluidRegions[i];
+                #pragma omp section
+                forAll(fluidRegions, i)
+                {
+                    fvMesh& mesh = fluidRegions[i];
 
-                #include "readFluidMultiRegionPIMPLEControls.H"
-                #include "setRegionFluidFields.H"
-                #include "solveFluid.H"
-            }
+                    #include "readFluidMultiRegionPIMPLEControls.H"
+                    #include "setRegionFluidFields.H"
+                    #include "solveFluid.H"
+                }
+                #pragma omp section
+                forAll(solidRegions, i)
+                {
+                    fvMesh& mesh = solidRegions[i];
 
-            forAll(solidRegions, i)
-            {
-                fvMesh& mesh = solidRegions[i];
-
-                #include "readSolidMultiRegionPIMPLEControls.H"
-                #include "setRegionSolidFields.H"
-                #include "solveSolid.H"
+                    #include "readSolidMultiRegionPIMPLEControls.H"
+                    #include "setRegionSolidFields.H"
+                    #include "solveSolid.H"
+                }
             }
 
             if (coupled)
