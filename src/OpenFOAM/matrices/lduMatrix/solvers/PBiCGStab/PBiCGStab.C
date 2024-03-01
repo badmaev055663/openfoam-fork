@@ -84,6 +84,7 @@ Foam::solverPerformance Foam::PBiCGStab::scalarSolve
     );
 
     const label nCells = psi.size();
+    printf("nCells: %d\n", nCells);
 
     solveScalar* __restrict__ psiPtr = psi.begin();
 
@@ -175,10 +176,7 @@ Foam::solverPerformance Foam::PBiCGStab::scalarSolve
             // --- Update pA
             if (solverPerf.nIterations() == 0)
             {
-                for (label cell=0; cell<nCells; cell++)
-                {
-                    pAPtr[cell] = rAPtr[cell];
-                }
+                memcpy(pAPtr, rAPtr, nCells * sizeof(solveScalar));
             }
             else
             {
@@ -189,7 +187,7 @@ Foam::solverPerformance Foam::PBiCGStab::scalarSolve
                 }
 
                 const solveScalar beta = (rA0rA/rA0rAold)*(alpha/omega);
-
+                #pragma omp simd
                 for (label cell=0; cell<nCells; cell++)
                 {
                     pAPtr[cell] =
@@ -209,6 +207,7 @@ Foam::solverPerformance Foam::PBiCGStab::scalarSolve
             alpha = rA0rA/rA0AyA;
 
             // --- Calculate sA
+            #pragma omp simd
             for (label cell=0; cell<nCells; cell++)
             {
                 sAPtr[cell] = rAPtr[cell] - alpha*AyAPtr[cell];
@@ -224,6 +223,7 @@ Foam::solverPerformance Foam::PBiCGStab::scalarSolve
              && solverPerf.checkConvergence(tolerance_, relTol_, log_)
             )
             {
+                #pragma omp simd
                 for (label cell=0; cell<nCells; cell++)
                 {
                     psiPtr[cell] += alpha*yAPtr[cell];
@@ -247,6 +247,7 @@ Foam::solverPerformance Foam::PBiCGStab::scalarSolve
             omega = gSumProd(tA, sA, matrix().mesh().comm())/tAtA;
 
             // --- Update solution and residual
+            #pragma omp simd
             for (label cell=0; cell<nCells; cell++)
             {
                 psiPtr[cell] += alpha*yAPtr[cell] + omega*zAPtr[cell];

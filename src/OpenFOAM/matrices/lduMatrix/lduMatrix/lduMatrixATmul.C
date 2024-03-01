@@ -70,6 +70,7 @@ void Foam::lduMatrix::Amul
     );
 
     const label nCells = diag().size();
+    #pragma omp simd
     for (label cell=0; cell<nCells; cell++)
     {
         ApsiPtr[cell] = diagPtr[cell]*psiPtr[cell];

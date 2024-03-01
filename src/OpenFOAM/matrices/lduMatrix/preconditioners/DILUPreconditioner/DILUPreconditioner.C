@@ -118,7 +118,7 @@ void Foam::DILUPreconditioner::precondition
     const label nCells = wA.size();
     const label nFaces = solver_.matrix().upper().size();
     const label nFacesM1 = nFaces - 1;
-
+    #pragma omp simd
     for (label cell=0; cell<nCells; cell++)
     {
         wAPtr[cell] = rDPtr[cell]*rAPtr[cell];

@@ -1,4 +1,4 @@
 c++DBUG     =
-c++OPT      = -O3
+c++OPT      = -O3 -mavx
 
 ROUNDING_MATH = -frounding-math
