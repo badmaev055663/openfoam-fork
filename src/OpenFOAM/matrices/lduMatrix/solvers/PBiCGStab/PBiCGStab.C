@@ -28,6 +28,7 @@ License
 
 #include "PBiCGStab.H"
 #include "PrecisionAdaptor.H"
+#include <CL/opencl.hpp>
 
 // * * * * * * * * * * * * * * Static Data Members * * * * * * * * * * * * * //
 
@@ -69,6 +70,48 @@ Foam::PBiCGStab::PBiCGStab
 
 // * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
 
+const std::string src = R"(
+#define BUFFSIZE 1024
+kernel void calcSa(global const double *rAPtr,
+                global const double *AyAPtr,
+                global double *sAPtr,
+                double alpha) {
+    int i = get_global_id(0);
+    sAPtr[i] = rAPtr[i] - alpha * AyAPtr[i];
+}
+)";
+
+struct OpenCL {
+    cl::Platform platform;
+    cl::Device device;
+    cl::Context context;
+    cl::Program program;
+    cl::CommandQueue queue;
+};
+
+static int local_sz = 256;
+static void run_kernel(OpenCL& opencl,
+                    cl::Kernel &kernel,
+                    double *sAPtr,
+                    double *rAPtr,
+                    double *AyAPtr,
+                    double alpha,
+                    int n)
+{
+    cl::Buffer rA_buf(opencl.queue, rAPtr, rAPtr + n, true);
+    cl::Buffer AyA_buf(opencl.queue, AyAPtr, AyAPtr + n, true);
+    cl::Buffer sA_buf(opencl.context, CL_MEM_READ_WRITE, n * sizeof(double));
+    
+    kernel.setArg(0, rA_buf);
+    kernel.setArg(1, AyA_buf);
+    kernel.setArg(2, sA_buf);
+    kernel.setArg(3, alpha);
+
+    opencl.queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(n), cl::NDRange(local_sz));
+    opencl.queue.finish();
+    opencl.queue.enqueueReadBuffer(sA_buf, true, 0, n * sizeof(double), sAPtr);
+}
+
 Foam::solverPerformance Foam::PBiCGStab::scalarSolve
 (
     solveScalarField& psi,
@@ -82,9 +125,29 @@ Foam::solverPerformance Foam::PBiCGStab::scalarSolve
         lduMatrix::preconditioner::getName(controlDict_) + typeName,
         fieldName_
     );
+    std::vector<cl::Platform> platforms;
+    cl::Platform::get(&platforms);
+    if (platforms.empty()) {
+        std::cerr << "Unable to find OpenCL platforms\n";
+        return solverPerf;
+    }
+    cl::Platform platform = platforms[0];
+    std::clog << "Platform name: " << platform.getInfo<CL_PLATFORM_NAME>() << '\n';
+    // create context
+    cl_context_properties properties[] =
+    { CL_CONTEXT_PLATFORM, (cl_context_properties)platform(), 0};
+    cl::Context context(CL_DEVICE_TYPE_GPU, properties);
+    // get all devices associated with the context
+    std::vector<cl::Device> devices = context.getInfo<CL_CONTEXT_DEVICES>();
+    cl::Device device = devices[0];
+    std::clog << "Device name: " << device.getInfo<CL_DEVICE_NAME>() << '\n';
+    cl::Program program(context, src);
+    program.build(devices);
+    cl::CommandQueue queue(context, device);
+    OpenCL opencl{platform, device, context, program, queue};
+    cl::Kernel kernel(opencl.program, "calcSa");
 
     const label nCells = psi.size();
-    printf("nCells: %d\n", nCells);
 
     solveScalar* __restrict__ psiPtr = psi.begin();
 
@@ -205,10 +268,11 @@ Foam::solverPerformance Foam::PBiCGStab::scalarSolve
                 gSumProd(rA0, AyA, matrix().mesh().comm());
 
             alpha = rA0rA/rA0AyA;
-
+            label gpusz = nCells - nCells % local_sz;
             // --- Calculate sA
-            #pragma omp simd
-            for (label cell=0; cell<nCells; cell++)
+            run_kernel(opencl, kernel, sAPtr, rAPtr, AyAPtr, alpha, gpusz);
+            printf("gpusz: %d\n", gpusz);
+            for (label cell=gpusz; cell<nCells; cell++)
             {
                 sAPtr[cell] = rAPtr[cell] - alpha*AyAPtr[cell];
             }
