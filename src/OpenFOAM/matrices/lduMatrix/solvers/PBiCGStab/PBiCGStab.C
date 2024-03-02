@@ -28,7 +28,6 @@ License
 
 #include "PBiCGStab.H"
 #include "PrecisionAdaptor.H"
-#include <CL/opencl.hpp>
 
 // * * * * * * * * * * * * * * Static Data Members * * * * * * * * * * * * * //
 
@@ -70,25 +69,6 @@ Foam::PBiCGStab::PBiCGStab
 
 // * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
 
-const std::string src = R"(
-#define BUFFSIZE 1024
-kernel void calcSa(global const double *rAPtr,
-                global const double *AyAPtr,
-                global double *sAPtr,
-                double alpha) {
-    int i = get_global_id(0);
-    sAPtr[i] = rAPtr[i] - alpha * AyAPtr[i];
-}
-)";
-
-struct OpenCL {
-    cl::Platform platform;
-    cl::Device device;
-    cl::Context context;
-    cl::Program program;
-    cl::CommandQueue queue;
-};
-
 static int local_sz = 256;
 static void run_kernel(OpenCL& opencl,
                     cl::Kernel &kernel,
@@ -125,26 +105,220 @@ Foam::solverPerformance Foam::PBiCGStab::scalarSolve
         lduMatrix::preconditioner::getName(controlDict_) + typeName,
         fieldName_
     );
-    std::vector<cl::Platform> platforms;
-    cl::Platform::get(&platforms);
-    if (platforms.empty()) {
-        std::cerr << "Unable to find OpenCL platforms\n";
-        return solverPerf;
+
+    const label nCells = psi.size();
+
+    solveScalar* __restrict__ psiPtr = psi.begin();
+
+    solveScalarField pA(nCells);
+    solveScalar* __restrict__ pAPtr = pA.begin();
+
+    solveScalarField yA(nCells);
+    solveScalar* __restrict__ yAPtr = yA.begin();
+
+    // --- Calculate A.psi
+    matrix_.Amul(yA, psi, interfaceBouCoeffs_, interfaces_, cmpt);
+
+    // --- Calculate initial residual field
+    solveScalarField rA(source - yA);
+    solveScalar* __restrict__ rAPtr = rA.begin();
+
+    matrix().setResidualField
+    (
+        ConstPrecisionAdaptor<scalar, solveScalar>(rA)(),
+        fieldName_,
+        true
+    );
+
+    // --- Calculate normalisation factor
+    const solveScalar normFactor = this->normFactor(psi, source, yA, pA);
+
+    if ((log_ >= 2) || (lduMatrix::debug >= 2))
+    {
+        Info<< "   Normalisation factor = " << normFactor << endl;
     }
-    cl::Platform platform = platforms[0];
-    std::clog << "Platform name: " << platform.getInfo<CL_PLATFORM_NAME>() << '\n';
-    // create context
-    cl_context_properties properties[] =
-    { CL_CONTEXT_PLATFORM, (cl_context_properties)platform(), 0};
-    cl::Context context(CL_DEVICE_TYPE_GPU, properties);
-    // get all devices associated with the context
-    std::vector<cl::Device> devices = context.getInfo<CL_CONTEXT_DEVICES>();
-    cl::Device device = devices[0];
-    std::clog << "Device name: " << device.getInfo<CL_DEVICE_NAME>() << '\n';
-    cl::Program program(context, src);
-    program.build(devices);
-    cl::CommandQueue queue(context, device);
-    OpenCL opencl{platform, device, context, program, queue};
+
+    // --- Calculate normalised residual norm
+    solverPerf.initialResidual() =
+        gSumMag(rA, matrix().mesh().comm())
+       /normFactor;
+    solverPerf.finalResidual() = solverPerf.initialResidual();
+
+    // --- Check convergence, solve if not converged
+    if
+    (
+        minIter_ > 0
+     || !solverPerf.checkConvergence(tolerance_, relTol_, log_)
+    )
+    {
+        solveScalarField AyA(nCells);
+        solveScalar* __restrict__ AyAPtr = AyA.begin();
+
+        solveScalarField sA(nCells);
+        solveScalar* __restrict__ sAPtr = sA.begin();
+
+        solveScalarField zA(nCells);
+        solveScalar* __restrict__ zAPtr = zA.begin();
+
+        solveScalarField tA(nCells);
+        solveScalar* __restrict__ tAPtr = tA.begin();
+
+        // --- Store initial residual
+        const solveScalarField rA0(rA);
+
+        // --- Initial values not used
+        solveScalar rA0rA = 0;
+        solveScalar alpha = 0;
+        solveScalar omega = 0;
+
+        // --- Select and construct the preconditioner
+        if (!preconPtr_)
+        {
+            preconPtr_ = lduMatrix::preconditioner::New
+            (
+                *this,
+                controlDict_
+            );
+        }
+
+        // --- Solver iteration
+        do
+        {
+            // --- Store previous rA0rA
+            const solveScalar rA0rAold = rA0rA;
+
+            rA0rA = gSumProd(rA0, rA, matrix().mesh().comm());
+
+            // --- Test for singularity
+            if (solverPerf.checkSingularity(mag(rA0rA)))
+            {
+                break;
+            }
+
+            // --- Update pA
+            if (solverPerf.nIterations() == 0)
+            {
+                for (label cell=0; cell<nCells; cell++)
+                {
+                    pAPtr[cell] = rAPtr[cell];
+                }
+            }
+            else
+            {
+                // --- Test for singularity
+                if (solverPerf.checkSingularity(mag(omega)))
+                {
+                    break;
+                }
+
+                const solveScalar beta = (rA0rA/rA0rAold)*(alpha/omega);
+
+                for (label cell=0; cell<nCells; cell++)
+                {
+                    pAPtr[cell] =
+                        rAPtr[cell] + beta*(pAPtr[cell] - omega*AyAPtr[cell]);
+                }
+            }
+
+            // --- Precondition pA
+            preconPtr_->precondition(yA, pA, cmpt);
+
+            // --- Calculate AyA
+            matrix_.Amul(AyA, yA, interfaceBouCoeffs_, interfaces_, cmpt);
+
+            const solveScalar rA0AyA =
+                gSumProd(rA0, AyA, matrix().mesh().comm());
+
+            alpha = rA0rA/rA0AyA;
+
+            // --- Calculate sA
+            for (label cell=0; cell<nCells; cell++)
+            {
+                sAPtr[cell] = rAPtr[cell] - alpha*AyAPtr[cell];
+            }
+
+            // --- Test sA for convergence
+            solverPerf.finalResidual() =
+                gSumMag(sA, matrix().mesh().comm())/normFactor;
+
+            if
+            (
+                solverPerf.nIterations() >= minIter_
+             && solverPerf.checkConvergence(tolerance_, relTol_, log_)
+            )
+            {
+                for (label cell=0; cell<nCells; cell++)
+                {
+                    psiPtr[cell] += alpha*yAPtr[cell];
+                }
+
+                solverPerf.nIterations()++;
+
+                return solverPerf;
+            }
+
+            // --- Precondition sA
+            preconPtr_->precondition(zA, sA, cmpt);
+
+            // --- Calculate tA
+            matrix_.Amul(tA, zA, interfaceBouCoeffs_, interfaces_, cmpt);
+
+            const solveScalar tAtA = gSumSqr(tA, matrix().mesh().comm());
+
+            // --- Calculate omega from tA and sA
+            //     (cheaper than using zA with preconditioned tA)
+            omega = gSumProd(tA, sA, matrix().mesh().comm())/tAtA;
+
+            // --- Update solution and residual
+            for (label cell=0; cell<nCells; cell++)
+            {
+                psiPtr[cell] += alpha*yAPtr[cell] + omega*zAPtr[cell];
+                rAPtr[cell] = sAPtr[cell] - omega*tAPtr[cell];
+            }
+
+            solverPerf.finalResidual() =
+                gSumMag(rA, matrix().mesh().comm())
+               /normFactor;
+        } while
+        (
+            (
+              ++solverPerf.nIterations() < maxIter_
+            && !solverPerf.checkConvergence(tolerance_, relTol_, log_)
+            )
+         || solverPerf.nIterations() < minIter_
+        );
+    }
+
+    if (preconPtr_)
+    {
+        preconPtr_->setFinished(solverPerf);
+    }
+
+    matrix().setResidualField
+    (
+        ConstPrecisionAdaptor<scalar, solveScalar>(rA)(),
+        fieldName_,
+        false
+    );
+
+    return solverPerf;
+}
+
+Foam::solverPerformance Foam::PBiCGStab::scalarSolveGPU
+(
+    solveScalarField& psi,
+    const solveScalarField& source,
+    OpenCL& opencl,
+    const direction cmpt
+) const
+{
+    // --- Setup class containing solver performance data
+    solverPerformance solverPerf
+    (
+        lduMatrix::preconditioner::getName(controlDict_) + typeName,
+        fieldName_
+    );
+    
     cl::Kernel kernel(opencl.program, "calcSa");
 
     const label nCells = psi.size();
@@ -359,6 +533,24 @@ Foam::solverPerformance Foam::PBiCGStab::solve
     (
         tpsi.ref(),
         ConstPrecisionAdaptor<solveScalar, scalar>(source)(),
+        cmpt
+    );
+}
+
+Foam::solverPerformance Foam::PBiCGStab::solveGPU
+(
+    scalarField& psi_s,
+    const scalarField& source,
+    OpenCL& opencl,
+    const direction cmpt
+) const
+{
+    PrecisionAdaptor<solveScalar, scalar> tpsi(psi_s);
+    return scalarSolveGPU
+    (
+        tpsi.ref(),
+        ConstPrecisionAdaptor<solveScalar, scalar>(source)(),
+        opencl,
         cmpt
     );
 }

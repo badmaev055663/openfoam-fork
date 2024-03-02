@@ -58,8 +58,20 @@ Description
 #include "fvCFD.H"
 #include "fvOptions.H"
 #include "simpleControl.H"
+#include "omp.h"
+#include <CL/opencl.hpp>
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+static const std::string src = R"(
+#define BUFFSIZE 1024
+kernel void calcSa(global const double *rAPtr,
+                global const double *AyAPtr,
+                global double *sAPtr,
+                double alpha) {
+    int i = get_global_id(0);
+    sAPtr[i] = rAPtr[i] - alpha * AyAPtr[i];
+}
+)";
 
 int main(int argc, char *argv[])
 {
@@ -82,6 +94,26 @@ int main(int argc, char *argv[])
     Info<< "\nCalculating scalar transport\n" << endl;
 
     #include "CourantNo.H"
+    std::vector<cl::Platform> platforms;
+    cl::Platform::get(&platforms);
+    if (platforms.empty()) {
+        std::cerr << "Unable to find OpenCL platforms\n";
+        return 0;
+    }
+    cl::Platform platform = platforms[0];
+    Info << "Platform name: " << platform.getInfo<CL_PLATFORM_NAME>() << '\n';
+    // create context
+    cl_context_properties properties[] =
+    { CL_CONTEXT_PLATFORM, (cl_context_properties)platform(), 0};
+    cl::Context context(CL_DEVICE_TYPE_GPU, properties);
+    // get all devices associated with the context
+    std::vector<cl::Device> devices = context.getInfo<CL_CONTEXT_DEVICES>();
+    cl::Device device = devices[0];
+    std::clog << "Device name: " << device.getInfo<CL_DEVICE_NAME>() << '\n';
+    cl::Program program(context, src);
+    program.build(devices);
+    cl::CommandQueue queue(context, device);
+    OpenCL opencl{platform, device, context, program, queue};
 
     while (simple.loop())
     {
@@ -100,7 +132,10 @@ int main(int argc, char *argv[])
 
             TEqn.relax();
             fvOptions.constrain(TEqn);
-            TEqn.solve();
+            double t1 = omp_get_wtime();
+            TEqn.solveGPU(opencl);
+            double t2 = omp_get_wtime();
+            printf("gpu loop time: %lf ms\n", (t2 - t1) * 1000);
             fvOptions.correct(T);
         }
 

@@ -55,8 +55,17 @@ SourceFiles
 #define PBiCGStab_H
 
 #include "lduMatrix.H"
+#include <CL/opencl.hpp>
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+struct OpenCL {
+    cl::Platform platform;
+    cl::Device device;
+    cl::Context context;
+    cl::Program program;
+    cl::CommandQueue queue;
+};
 
 namespace Foam
 {
@@ -118,11 +127,27 @@ public:
             const direction cmpt = 0
         ) const;
 
+        virtual solverPerformance scalarSolveGPU
+        (
+            solveScalarField& psi,
+            const solveScalarField& source,
+            OpenCL& opencl,
+            const direction cmpt = 0
+        ) const;
+
         //- Solve the matrix with this solver
         virtual solverPerformance solve
         (
             scalarField& psi,
             const scalarField& source,
+            const direction cmpt=0
+        ) const;
+
+        virtual solverPerformance solveGPU
+        (
+            scalarField& psi,
+            const scalarField& source,
+            OpenCL& opencl,
             const direction cmpt=0
         ) const;
 };

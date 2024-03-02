@@ -74,6 +74,7 @@ endif
 EXE_INC         =
 EXE_LIBS        = -lOpenCL
 LIB_LIBS        = -lOpenCL
+SYS_LIBS 		+= -lOpenCL
 
 # Project include/libraries
 PROJECT_INC     = \

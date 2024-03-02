@@ -68,6 +68,16 @@ SourceFiles
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
+#include <CL/opencl.hpp>
+
+struct OpenCL {
+    cl::Platform platform;
+    cl::Device device;
+    cl::Context context;
+    cl::Program program;
+    cl::CommandQueue queue;
+};
+
 namespace Foam
 {
 
@@ -400,6 +410,13 @@ public:
                 virtual SolverPerformance<scalar> solve
                 (
                     fvMatrix<scalar>&,
+                    const dictionary&
+                ) const;
+
+                virtual SolverPerformance<scalar> solveGPU
+                (
+                    fvMatrix<scalar>&,
+                    OpenCL& opencl,
                     const dictionary&
                 ) const;
 

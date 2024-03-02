@@ -603,6 +603,8 @@ public:
             //  Use the given solver controls
             SolverPerformance<Type> solveSegregatedOrCoupled(const dictionary&);
 
+            SolverPerformance<Type> solveSegregatedOrCoupledGPU(const dictionary&, OpenCL& opencl);
+
             //- Solve segregated or coupled returning the solution statistics.
             //  Solver controls read from fvSolution
             SolverPerformance<Type> solveSegregatedOrCoupled();
@@ -618,6 +620,7 @@ public:
             //- Solve returning the solution statistics.
             //  Use the given solver controls
             SolverPerformance<Type> solve(const dictionary&);
+            SolverPerformance<Type> solveGPU(const dictionary&, OpenCL&);
 
             //- Solve returning the solution statistics.
             //  Uses \p name solver controls from fvSolution
@@ -626,6 +629,7 @@ public:
             //- Solve returning the solution statistics.
             //  Solver controls read from fvSolution
             SolverPerformance<Type> solve();
+            SolverPerformance<Type> solveGPU(OpenCL&);
 
             //- Return the matrix residual
             tmp<Field<Type>> residual() const;
