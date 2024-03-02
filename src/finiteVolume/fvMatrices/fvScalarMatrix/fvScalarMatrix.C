@@ -327,6 +327,173 @@ Foam::solverPerformance Foam::fvMatrix<Foam::scalar>::solveSegregated
     return solverPerf;
 }
 
+template<>
+Foam::solverPerformance Foam::fvMatrix<Foam::scalar>::solveSegregatedGPU
+(
+    const dictionary& solverControls,
+    OpenCL& opencl
+)
+{
+    if (debug)
+    {
+        Info.masterStream(this->mesh().comm())
+            << "fvMatrix<scalar>::solveSegregated"
+               "(const dictionary& solverControls) : "
+               "solving fvMatrix<scalar>"
+            << endl;
+    }
+
+    const int logLevel =
+        solverControls.getOrDefault<int>
+        (
+            "log",
+            solverPerformance::debug
+        );
+
+    scalarField saveLower;
+    scalarField saveUpper;
+
+    if (useImplicit_)
+    {
+        createOrUpdateLduPrimitiveAssembly();
+
+        if (psi_.mesh().fluxRequired(psi_.name()))
+        {
+            // Save lower/upper for flux calculation
+            if (asymmetric())
+            {
+                saveLower = lower();
+            }
+            saveUpper = upper();
+        }
+
+        setLduMesh(*lduMeshPtr());
+        transferFvMatrixCoeffs();
+        setBounAndInterCoeffs();
+        direction cmpt = 0;
+        manipulateMatrix(cmpt);
+    }
+
+    scalarField saveDiag(diag());
+    addBoundaryDiag(diag(), 0);
+
+    scalarField totalSource(source_);
+    addBoundarySource(totalSource, false);
+
+    lduInterfaceFieldPtrsList interfaces;
+    PtrDynList<lduInterfaceField> newInterfaces;
+    if (!useImplicit_)
+    {
+        interfaces = this->psi(0).boundaryField().scalarInterfaces();
+    }
+    else
+    {
+        setInterfaces(interfaces, newInterfaces);
+    }
+
+    tmp<scalarField> tpsi;
+    if (!useImplicit_)
+    {
+        tpsi.ref
+        (
+            const_cast<GeometricField<scalar, fvPatchField, volMesh>&>
+            (
+                psi_
+            ).primitiveFieldRef()
+        );
+    }
+    else
+    {
+        tpsi = tmp<scalarField>::New(lduAddr().size(), Zero);
+        scalarField& psi = tpsi.ref();
+
+        for (label fieldi = 0; fieldi < nMatrices(); fieldi++)
+        {
+            const label cellOffset = lduMeshPtr()->cellOffsets()[fieldi];
+            const auto& psiInternal = this->psi(fieldi).primitiveField();
+
+            forAll(psiInternal, localCellI)
+            {
+                psi[cellOffset + localCellI] = psiInternal[localCellI];
+            }
+        }
+    }
+    scalarField& psi = tpsi.ref();
+
+    // Solver call
+    solverPerformance solverPerf = lduMatrix::solver::New
+    (
+        this->psi(0).name(),
+        *this,
+        boundaryCoeffs_,
+        internalCoeffs_,
+        interfaces,
+        solverControls
+    )->solveGPU(psi, totalSource, opencl);
+
+    if (useImplicit_)
+    {
+        for (label fieldi = 0; fieldi < nMatrices(); fieldi++)
+        {
+            auto& psiInternal =
+                const_cast<GeometricField<scalar, fvPatchField, volMesh>&>
+                (
+                    this->psi(fieldi)
+                ).primitiveFieldRef();
+
+            const label cellOffset = lduMeshPtr()->cellOffsets()[fieldi];
+
+            forAll(psiInternal, localCellI)
+            {
+                psiInternal[localCellI] = psi[localCellI + cellOffset];
+            }
+        }
+    }
+
+    if (logLevel)
+    {
+        solverPerf.print(Info.masterStream(mesh().comm()));
+    }
+
+    diag() = saveDiag;
+
+    if (useImplicit_)
+    {
+        if (psi_.mesh().fluxRequired(psi_.name()))
+        {
+            // Restore lower/upper
+            if (asymmetric())
+            {
+                lower().setSize(saveLower.size());
+                lower() = saveLower;
+            }
+
+            upper().setSize(saveUpper.size());
+            upper() = saveUpper;
+        }
+        // Set the original lduMesh
+        setLduMesh(psi_.mesh());
+    }
+
+    for (label fieldi = 0; fieldi < nMatrices(); fieldi++)
+    {
+        auto& localPsi =
+            const_cast<GeometricField<scalar, fvPatchField, volMesh>&>
+            (
+                this->psi(fieldi)
+            );
+
+        localPsi.correctBoundaryConditions();
+        localPsi.mesh().data().setSolverPerformance
+        (
+            localPsi.name(),
+            solverPerf
+        );
+    }
+
+    return solverPerf;
+}
+
 
 template<>
 Foam::tmp<Foam::scalarField> Foam::fvMatrix<Foam::scalar>::residual() const

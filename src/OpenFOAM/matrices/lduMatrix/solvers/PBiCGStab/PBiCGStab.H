@@ -55,17 +55,9 @@ SourceFiles
 #define PBiCGStab_H
 
 #include "lduMatrix.H"
-#include <CL/opencl.hpp>
+#include "gpu.H"
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-
-struct OpenCL {
-    cl::Platform platform;
-    cl::Device device;
-    cl::Context context;
-    cl::Program program;
-    cl::CommandQueue queue;
-};
 
 namespace Foam
 {
@@ -149,7 +141,7 @@ public:
             const scalarField& source,
             OpenCL& opencl,
             const direction cmpt=0
-        ) const;
+        ) const override;
 };
 
 

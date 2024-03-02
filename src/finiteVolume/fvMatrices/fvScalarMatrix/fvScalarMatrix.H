@@ -68,6 +68,9 @@ template<>
 solverPerformance fvMatrix<scalar>::solveSegregated(const dictionary&);
 
 template<>
+solverPerformance fvMatrix<scalar>::solveSegregatedGPU(const dictionary&, OpenCL&);
+
+template<>
 tmp<scalarField> fvMatrix<scalar>::residual() const;
 
 template<>

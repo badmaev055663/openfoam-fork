@@ -59,7 +59,7 @@ Description
 #include "fvOptions.H"
 #include "simpleControl.H"
 #include "omp.h"
-#include <CL/opencl.hpp>
+#include "gpu.H"
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 static const std::string src = R"(

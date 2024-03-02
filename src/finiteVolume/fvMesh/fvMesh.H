@@ -68,15 +68,7 @@ SourceFiles
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-#include <CL/opencl.hpp>
-
-struct OpenCL {
-    cl::Platform platform;
-    cl::Device device;
-    cl::Context context;
-    cl::Program program;
-    cl::CommandQueue queue;
-};
+#include "gpu.H"
 
 namespace Foam
 {

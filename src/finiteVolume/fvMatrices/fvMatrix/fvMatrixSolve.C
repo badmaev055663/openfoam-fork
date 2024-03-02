@@ -139,7 +139,7 @@ Foam::SolverPerformance<Type> Foam::fvMatrix<Type>::solveSegregatedOrCoupledGPU
 
     if (type == "segregated")
     {
-        return solveSegregated(solverControls);
+        return solveSegregatedGPU(solverControls, opencl);
     }
     else if (type == "coupled")
     {

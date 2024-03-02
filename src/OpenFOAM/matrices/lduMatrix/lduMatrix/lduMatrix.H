@@ -64,6 +64,7 @@ SourceFiles
 #include "InfoProxy.H"
 #include "Enum.H"
 #include "profilingTrigger.H"
+#include "gpu.H"
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
@@ -296,6 +297,14 @@ public:
                 const scalarField& source,
                 const direction cmpt=0
             ) const = 0;
+
+            virtual solverPerformance solveGPU
+            (
+                scalarField& psi,
+                const scalarField& source,
+                OpenCL& opencl,
+                const direction cmpt=0
+            ) const;
 
             //- Solve with given field and rhs (in solveScalar precision).
             //  Default is to call solve routine

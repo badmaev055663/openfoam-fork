@@ -320,6 +320,7 @@ Foam::solverPerformance Foam::PBiCGStab::scalarSolveGPU
     );
     
     cl::Kernel kernel(opencl.program, "calcSa");
+    printf("I am in gpu!\n");
 
     const label nCells = psi.size();
 

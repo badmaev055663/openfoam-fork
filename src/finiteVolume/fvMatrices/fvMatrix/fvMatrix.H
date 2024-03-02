@@ -603,7 +603,7 @@ public:
             //  Use the given solver controls
             SolverPerformance<Type> solveSegregatedOrCoupled(const dictionary&);
 
-            SolverPerformance<Type> solveSegregatedOrCoupledGPU(const dictionary&, OpenCL& opencl);
+            SolverPerformance<Type> solveSegregatedOrCoupledGPU(const dictionary&, OpenCL&);
 
             //- Solve segregated or coupled returning the solution statistics.
             //  Solver controls read from fvSolution
@@ -612,6 +612,8 @@ public:
             //- Solve segregated returning the solution statistics.
             //  Use the given solver controls
             SolverPerformance<Type> solveSegregated(const dictionary&);
+
+            SolverPerformance<Type> solveSegregatedGPU(const dictionary&, OpenCL&);
 
             //- Solve coupled returning the solution statistics.
             //  Use the given solver controls

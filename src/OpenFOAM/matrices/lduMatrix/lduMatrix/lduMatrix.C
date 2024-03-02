@@ -182,6 +182,19 @@ Foam::lduMatrix::~lduMatrix()
     }
 }
 
+Foam::solverPerformance Foam::lduMatrix::solver::solveGPU
+(
+    scalarField& psi,
+    const scalarField& source,
+    OpenCL& opencl,
+    const direction cmpt
+) const
+{
+    // stub to avoid pure virtual function
+    solverPerformance stub;
+    return stub;
+}
+
 
 Foam::scalarField& Foam::lduMatrix::lower()
 {
