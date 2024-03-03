@@ -320,7 +320,6 @@ Foam::solverPerformance Foam::PBiCGStab::scalarSolveGPU
     );
     
     cl::Kernel kernel(opencl.program, "calcSa");
-    printf("I am in gpu!\n");
 
     const label nCells = psi.size();
 
@@ -446,7 +445,6 @@ Foam::solverPerformance Foam::PBiCGStab::scalarSolveGPU
             label gpusz = nCells - nCells % local_sz;
             // --- Calculate sA
             run_kernel(opencl, kernel, sAPtr, rAPtr, AyAPtr, alpha, gpusz);
-            printf("gpusz: %d\n", gpusz);
             for (label cell=gpusz; cell<nCells; cell++)
             {
                 sAPtr[cell] = rAPtr[cell] - alpha*AyAPtr[cell];

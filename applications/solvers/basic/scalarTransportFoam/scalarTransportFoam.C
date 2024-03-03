@@ -114,7 +114,7 @@ int main(int argc, char *argv[])
     program.build(devices);
     cl::CommandQueue queue(context, device);
     OpenCL opencl{platform, device, context, program, queue};
-
+    double start = omp_get_wtime();
     while (simple.loop())
     {
         Info<< "Time = " << runTime.timeName() << nl << endl;
@@ -141,6 +141,8 @@ int main(int argc, char *argv[])
 
         runTime.write();
     }
+    double end = omp_get_wtime();
+    printf("total gpu time: %.4lf s\n", (end - start));
 
     Info<< "End\n" << endl;
 
