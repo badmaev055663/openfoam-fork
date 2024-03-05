@@ -62,16 +62,6 @@ Description
 #include "gpu.H"
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-static const std::string src = R"(
-#define BUFFSIZE 1024
-kernel void calcSa(global const double *rAPtr,
-                global const double *AyAPtr,
-                global double *sAPtr,
-                double alpha) {
-    int i = get_global_id(0);
-    sAPtr[i] = rAPtr[i] - alpha * AyAPtr[i];
-}
-)";
 
 int main(int argc, char *argv[])
 {
@@ -109,8 +99,14 @@ int main(int argc, char *argv[])
     // get all devices associated with the context
     std::vector<cl::Device> devices = context.getInfo<CL_CONTEXT_DEVICES>();
     cl::Device device = devices[0];
-    std::clog << "Device name: " << device.getInfo<CL_DEVICE_NAME>() << '\n';
-    cl::Program program(context, src);
+    std::string baseDir = std::getenv("WM_PROJECT_DIR");
+    std::ifstream srcFile(baseDir + "/src/OpenFOAM/matrices/lduMatrix/solvers/PBiCGStab/PBiCGStab.cl");
+
+    std::string kernelSrc((std::istreambuf_iterator<char>(srcFile)),
+                    std::istreambuf_iterator<char>());
+   
+    cl::Program program(context, kernelSrc);
+
     program.build(devices);
     cl::CommandQueue queue(context, device);
     OpenCL opencl{platform, device, context, program, queue};
