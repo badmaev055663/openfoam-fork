@@ -84,30 +84,38 @@ int main(int argc, char *argv[])
     Info<< "\nCalculating scalar transport\n" << endl;
 
     #include "CourantNo.H"
+
     std::vector<cl::Platform> platforms;
     cl::Platform::get(&platforms);
     if (platforms.empty()) {
-        std::cerr << "Unable to find OpenCL platforms\n";
+        InfoErr << "Unable to find OpenCL platforms\n";
         return 0;
     }
     cl::Platform platform = platforms[0];
     Info << "Platform name: " << platform.getInfo<CL_PLATFORM_NAME>() << '\n';
-    // create context
+
     cl_context_properties properties[] =
     { CL_CONTEXT_PLATFORM, (cl_context_properties)platform(), 0};
     cl::Context context(CL_DEVICE_TYPE_GPU, properties);
+
     // get all devices associated with the context
     std::vector<cl::Device> devices = context.getInfo<CL_CONTEXT_DEVICES>();
     cl::Device device = devices[0];
+
     std::string baseDir = std::getenv("WM_PROJECT_DIR");
     std::ifstream srcFile(baseDir + "/src/OpenFOAM/matrices/lduMatrix/solvers/PBiCGStab/PBiCGStab.cl");
-
     std::string kernelSrc((std::istreambuf_iterator<char>(srcFile)),
                     std::istreambuf_iterator<char>());
-   
-    cl::Program program(context, kernelSrc);
 
-    program.build(devices);
+    cl::Program program(context, kernelSrc);
+    cl_int err = program.build(devices);
+    if (err != CL_SUCCESS) {
+        InfoErr << "OpenCL program build error: " << err << endl;
+        std::string msg = program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(device);
+        InfoErr << msg;
+        return 1;
+    }
+
     cl::CommandQueue queue(context, device);
     OpenCL opencl{platform, device, context, program, queue};
     double start = omp_get_wtime();
