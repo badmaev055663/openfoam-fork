@@ -69,7 +69,6 @@ Foam::PBiCGStab::PBiCGStab
 
 // * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
 
-static int local_sz = 256;
 static void run_kernel(OpenCL& opencl,
                     cl::Kernel &kernel,
                     double *sAPtr,
@@ -81,13 +80,15 @@ static void run_kernel(OpenCL& opencl,
     cl::Buffer rA_buf(opencl.queue, rAPtr, rAPtr + n, true);
     cl::Buffer AyA_buf(opencl.queue, AyAPtr, AyAPtr + n, true);
     cl::Buffer sA_buf(opencl.context, CL_MEM_READ_WRITE, n * sizeof(double));
+    int locSz = 128;
     
     kernel.setArg(0, rA_buf);
     kernel.setArg(1, AyA_buf);
     kernel.setArg(2, sA_buf);
     kernel.setArg(3, alpha);
+    kernel.setArg(4, n);
 
-    opencl.queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(n), cl::NDRange(local_sz));
+    opencl.queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(n - n % locSz), cl::NDRange(locSz));
     opencl.queue.finish();
     opencl.queue.enqueueReadBuffer(sA_buf, true, 0, n * sizeof(double), sAPtr);
 }
@@ -442,13 +443,8 @@ Foam::solverPerformance Foam::PBiCGStab::scalarSolveGPU
                 gSumProd(rA0, AyA, matrix().mesh().comm());
 
             alpha = rA0rA/rA0AyA;
-            label gpusz = nCells - nCells % local_sz;
             // --- Calculate sA
-            run_kernel(opencl, kernel, sAPtr, rAPtr, AyAPtr, alpha, gpusz);
-            for (label cell=gpusz; cell<nCells; cell++)
-            {
-                sAPtr[cell] = rAPtr[cell] - alpha*AyAPtr[cell];
-            }
+            run_kernel(opencl, kernel, sAPtr, rAPtr, AyAPtr, alpha, nCells);  
 
             // --- Test sA for convergence
             solverPerf.finalResidual() =
