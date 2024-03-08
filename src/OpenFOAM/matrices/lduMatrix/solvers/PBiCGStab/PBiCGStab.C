@@ -69,19 +69,34 @@ Foam::PBiCGStab::PBiCGStab
 
 // * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
 
-static void runComputeSA(OpenCL& opencl,
+static double runComputeSA(OpenCL& opencl,
                     cl::Kernel &kernel,
+                    cl::Kernel &kernel2,
                     double *sAPtr,
                     double *rAPtr,
                     double *AyAPtr,
-                    double alpha,
+                    double *rA0Ptr,
+                    double rA0rA,
                     int n)
 {
     cl::Buffer rA_buf(opencl.queue, rAPtr, rAPtr + n, true);
     cl::Buffer AyA_buf(opencl.queue, AyAPtr, AyAPtr + n, true);
+    cl::Buffer rA0_buf(opencl.queue, rA0Ptr, rA0Ptr + n, true);
     cl::Buffer sA_buf(opencl.context, CL_MEM_READ_WRITE, n * sizeof(double));
+    cl::Buffer rA0AyA_buf(opencl.context, CL_MEM_READ_WRITE, sizeof(double));
     int locSz = 128;
-    
+    double alpha;
+
+    kernel2.setArg(0, AyA_buf);
+    kernel2.setArg(1, rA0_buf);
+    kernel2.setArg(2, rA0AyA_buf);
+    kernel2.setArg(3, n);
+
+    opencl.queue.enqueueNDRangeKernel(kernel2, cl::NullRange, cl::NDRange(n - n % locSz), cl::NDRange(locSz));
+    opencl.queue.finish();
+    opencl.queue.enqueueReadBuffer(rA0AyA_buf, true, 0, sizeof(double), &alpha);
+    alpha = rA0rA / alpha;
+
     kernel.setArg(0, rA_buf);
     kernel.setArg(1, AyA_buf);
     kernel.setArg(2, sA_buf);
@@ -91,6 +106,7 @@ static void runComputeSA(OpenCL& opencl,
     opencl.queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(n - n % locSz), cl::NDRange(locSz));
     opencl.queue.finish();
     opencl.queue.enqueueReadBuffer(sA_buf, true, 0, n * sizeof(double), sAPtr);
+    return alpha;
 }
 
 static double runSumProd(OpenCL& opencl,
@@ -464,11 +480,8 @@ Foam::solverPerformance Foam::PBiCGStab::scalarSolveGPU
             // --- Calculate AyA
             matrix_.Amul(AyA, yA, interfaceBouCoeffs_, interfaces_, cmpt);
 
-            const solveScalar rA0AyA = runSumProd(opencl, kernel2, AyAPtr, rA0Ptr, nCells);
-
-            alpha = rA0rA/rA0AyA;
-            // --- Calculate sA
-            runComputeSA(opencl, kernel, sAPtr, rAPtr, AyAPtr, alpha, nCells);  
+            // --- Calculate sA and alpha
+            alpha = runComputeSA(opencl, kernel, kernel2, sAPtr, rAPtr, AyAPtr, rA0Ptr, rA0rA, nCells);  
 
             // --- Test sA for convergence
             solverPerf.finalResidual() =
