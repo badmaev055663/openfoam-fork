@@ -62,3 +62,18 @@ kernel void calcSa(global const double *rAPtr,
             sAPtr[j] = rAPtr[j] - alpha * AyAPtr[j];
     }
 }
+
+kernel void calcPa(global const double *rAPtr,
+                global const double *AyAPtr,
+                global double *pAPtr,
+                double beta, double omega, int N)
+{
+    int i = get_global_id(0);
+    int n = get_global_size(0);
+    if (i < n - 1) {
+        pAPtr[i] = rAPtr[i] + beta * (pAPtr[i] - omega *AyAPtr[i]);
+    } else {
+        for (int j = n - 1; j < N; j++)
+            pAPtr[i] = rAPtr[i] + beta * (pAPtr[i] - omega *AyAPtr[i]);
+    }
+}
