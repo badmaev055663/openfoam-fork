@@ -118,10 +118,10 @@ int main(int argc, char *argv[])
 
     cl::CommandQueue queue(context, device);
     OpenCL opencl{platform, device, context, program, queue};
-    std::string env = std::getenv("FOAM_USE_GPU");
     bool useGPU = false;
-    if (!env.empty()) {
-        useGPU = std::stoi(env);
+    const char *gpuEnv = std::getenv("FOAM_USE_GPU");
+    if (gpuEnv) {
+        useGPU = std::stoi(std::string(gpuEnv));
     }
     double start = omp_get_wtime();
     while (simple.loop())
