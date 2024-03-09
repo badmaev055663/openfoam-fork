@@ -118,6 +118,11 @@ int main(int argc, char *argv[])
 
     cl::CommandQueue queue(context, device);
     OpenCL opencl{platform, device, context, program, queue};
+    std::string env = std::getenv("FOAM_USE_GPU");
+    bool useGPU = false;
+    if (!env.empty()) {
+        useGPU = std::stoi(env);
+    }
     double start = omp_get_wtime();
     while (simple.loop())
     {
@@ -137,9 +142,12 @@ int main(int argc, char *argv[])
             TEqn.relax();
             fvOptions.constrain(TEqn);
             double t1 = omp_get_wtime();
-            TEqn.solveGPU(opencl);
+            if (useGPU)
+                TEqn.solveGPU(opencl);
+            else
+                TEqn.solve();
             double t2 = omp_get_wtime();
-            printf("gpu loop time: %lf ms\n", (t2 - t1) * 1000);
+            printf("solver loop time: %lf ms\n", (t2 - t1) * 1000);
             fvOptions.correct(T);
         }
 
