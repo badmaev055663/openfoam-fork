@@ -154,7 +154,7 @@ int main(int argc, char *argv[])
         runTime.write();
     }
     double end = omp_get_wtime();
-    printf("total gpu time: %.4lf s\n", (end - start));
+    printf("total solver time: %.4lf s\n", (end - start));
 
     Info<< "End\n" << endl;
 

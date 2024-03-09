@@ -74,6 +74,6 @@ kernel void calcPa(global const double *rAPtr,
         pAPtr[i] = rAPtr[i] + beta * (pAPtr[i] - omega *AyAPtr[i]);
     } else {
         for (int j = n - 1; j < N; j++)
-            pAPtr[i] = rAPtr[i] + beta * (pAPtr[i] - omega *AyAPtr[i]);
+            pAPtr[j] = rAPtr[j] + beta * (pAPtr[j] - omega *AyAPtr[j]);
     }
 }
