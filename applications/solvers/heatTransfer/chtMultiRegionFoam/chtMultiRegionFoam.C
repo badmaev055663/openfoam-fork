@@ -112,26 +112,21 @@ int main(int argc, char *argv[])
         {
             const bool finalIter = (oCorr == nOuterCorr-1);
 
-            #pragma omp parallel sections
+            forAll(fluidRegions, i)
             {
-                #pragma omp section
-                forAll(fluidRegions, i)
-                {
-                    fvMesh& mesh = fluidRegions[i];
+                fvMesh& mesh = fluidRegions[i];
 
-                    #include "readFluidMultiRegionPIMPLEControls.H"
-                    #include "setRegionFluidFields.H"
-                    #include "solveFluid.H"
-                }
-                #pragma omp section
-                forAll(solidRegions, i)
-                {
-                    fvMesh& mesh = solidRegions[i];
+                #include "readFluidMultiRegionPIMPLEControls.H"
+                #include "setRegionFluidFields.H"
+                #include "solveFluid.H"
+            }
+            forAll(solidRegions, i)
+            {
+                fvMesh& mesh = solidRegions[i];
 
-                    #include "readSolidMultiRegionPIMPLEControls.H"
-                    #include "setRegionSolidFields.H"
-                    #include "solveSolid.H"
-                }
+                #include "readSolidMultiRegionPIMPLEControls.H"
+                #include "setRegionSolidFields.H"
+                #include "solveSolid.H"
             }
 
             if (coupled)
