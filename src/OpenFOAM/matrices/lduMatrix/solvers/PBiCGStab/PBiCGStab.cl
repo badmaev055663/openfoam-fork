@@ -1,4 +1,4 @@
-#define BUFFSIZE 1024
+#define BUFFSIZE 2048
 
 // g - global
 // l - local
