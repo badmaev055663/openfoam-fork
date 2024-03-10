@@ -72,14 +72,13 @@ Foam::PBiCGStab::PBiCGStab
 static double runComputeSA(OpenCL& opencl,
                     cl::Kernel &sAkernel,
                     cl::Kernel &sumProdKernel,
+                    cl::Buffer &rA_buf,
                     double *sAPtr,
-                    double *rAPtr,
                     double *AyAPtr,
                     double *rA0Ptr,
                     double rA0rA,
                     int n)
 {
-    cl::Buffer rA_buf(opencl.queue, rAPtr, rAPtr + n, true);
     cl::Buffer AyA_buf(opencl.queue, AyAPtr, AyAPtr + n, true);
     cl::Buffer rA0_buf(opencl.queue, rA0Ptr, rA0Ptr + n, true);
     cl::Buffer sA_buf(opencl.context, CL_MEM_READ_WRITE, n * sizeof(double));
@@ -112,8 +111,9 @@ static double runComputeSA(OpenCL& opencl,
 static double runUpdatePA(OpenCL& opencl,
                     cl::Kernel &pAkernel,
                     cl::Kernel &sumProdKernel,
+                    cl::Buffer &rA0_buf,
+                    cl::Buffer &rA_buf,
                     double *rAPtr,
-                    double *rA0Ptr,
                     double *pAPtr,
                     double *AyAPtr,
                     double rA0rAold,
@@ -122,8 +122,6 @@ static double runUpdatePA(OpenCL& opencl,
                     int nIterations,
                     int n)
 {
-    cl::Buffer rA_buf(opencl.queue, rAPtr, rAPtr + n, true);
-    cl::Buffer rA0_buf(opencl.queue, rA0Ptr, rA0Ptr + n, true);
     cl::Buffer rA0rA_buf(opencl.context, CL_MEM_READ_WRITE, sizeof(double));
     int locSz = 128;
     double rA0rA;
@@ -466,23 +464,24 @@ Foam::solverPerformance Foam::PBiCGStab::scalarSolveGPU
                 controlDict_
             );
         }
+        solveScalar* __restrict__ rA0Ptr = rA0.begin();
+        cl::Buffer rA0_buf(opencl.queue, rA0Ptr, rA0Ptr + nCells, true);
 
         // --- Solver iteration
         do
         {
             // --- Store previous rA0rA
             const solveScalar rA0rAold = rA0rA;
-
-            solveScalar* __restrict__ rA0Ptr = rA0.begin();
-            rA0rA = runUpdatePA(opencl, pAkernel, sumProdKernel, rAPtr, rA0Ptr,
+            cl::Buffer rA_buf(opencl.queue, rAPtr, rAPtr + nCells, true);
+            rA0rA = runUpdatePA(opencl, pAkernel, sumProdKernel, rA0_buf, rA_buf, rAPtr,
                                 pAPtr, AyAPtr, rA0rAold,
                                 alpha, omega, solverPerf.nIterations(), nCells);
 
             // --- Test for singularity
-            /*if (solverPerf.checkSingularity(mag(rA0rA)))
+            if (solverPerf.checkSingularity(mag(rA0rA)))
             {
                 break;
-            }*/
+            }
 
             // --- Precondition pA
             preconPtr_->precondition(yA, pA, cmpt);
@@ -491,7 +490,7 @@ Foam::solverPerformance Foam::PBiCGStab::scalarSolveGPU
             matrix_.Amul(AyA, yA, interfaceBouCoeffs_, interfaces_, cmpt);
 
             // --- Calculate sA and alpha
-            alpha = runComputeSA(opencl, sAkernel, sumProdKernel, sAPtr, rAPtr, AyAPtr, rA0Ptr, rA0rA, nCells);  
+            alpha = runComputeSA(opencl, sAkernel, sumProdKernel, rA_buf, sAPtr, AyAPtr, rA0Ptr, rA0rA, nCells);  
 
             // --- Test sA for convergence
             solverPerf.finalResidual() =
