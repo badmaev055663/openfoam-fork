@@ -572,6 +572,14 @@ public:
                 const direction cmpt=0
             ) const = 0;
 
+            virtual void preconditionGPU
+            (
+                OpenCL& opencl,
+                solveScalarField& wA,
+                const solveScalarField& rA,
+                const direction cmpt=0
+            ) const;
+
             //- Return wT the transpose-matrix preconditioned form of
             //- residual rT.
             //  This is only required for preconditioning asymmetric matrices.

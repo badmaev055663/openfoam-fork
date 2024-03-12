@@ -97,6 +97,14 @@ public:
             const direction cmpt=0
         ) const;
 
+        virtual void preconditionGPU
+        (
+            OpenCL& opencl,
+            solveScalarField& wA,
+            const solveScalarField& rA,
+            const direction cmpt=0
+        ) const;
+
         //- Return wT the transpose-matrix preconditioned form of residual rT.
         virtual void preconditionT
         (

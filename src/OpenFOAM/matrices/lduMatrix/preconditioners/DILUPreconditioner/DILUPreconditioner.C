@@ -138,6 +138,53 @@ void Foam::DILUPreconditioner::precondition
     }
 }
 
+void Foam::DILUPreconditioner::preconditionGPU
+(
+    OpenCL& opencl,
+    solveScalarField& wA,
+    const solveScalarField& rA,
+    const direction
+) const
+{
+    solveScalar* __restrict__ wAPtr = wA.begin();
+    const solveScalar* __restrict__ rAPtr = rA.begin();
+    const solveScalar* __restrict__ rDPtr = rD_.begin();
+
+    const label* const __restrict__ uPtr =
+        solver_.matrix().lduAddr().upperAddr().begin();
+    const label* const __restrict__ lPtr =
+        solver_.matrix().lduAddr().lowerAddr().begin();
+    const label* const __restrict__ losortPtr =
+        solver_.matrix().lduAddr().losortAddr().begin();
+
+    const scalar* const __restrict__ upperPtr =
+        solver_.matrix().upper().begin();
+    const scalar* const __restrict__ lowerPtr =
+        solver_.matrix().lower().begin();
+
+    const label nCells = wA.size();
+    const label nFaces = solver_.matrix().upper().size();
+    const label nFacesM1 = nFaces - 1;
+    #pragma omp simd
+    for (label cell=0; cell<nCells; cell++)
+    {
+        wAPtr[cell] = rDPtr[cell]*rAPtr[cell];
+    }
+
+    for (label face=0; face<nFaces; face++)
+    {
+        const label sface = losortPtr[face];
+        wAPtr[uPtr[sface]] -=
+            rDPtr[uPtr[sface]]*lowerPtr[sface]*wAPtr[lPtr[sface]];
+    }
+
+    for (label face=nFacesM1; face>=0; face--)
+    {
+        wAPtr[lPtr[face]] -=
+            rDPtr[lPtr[face]]*upperPtr[face]*wAPtr[uPtr[face]];
+    }
+}
+
 
 void Foam::DILUPreconditioner::preconditionT
 (
