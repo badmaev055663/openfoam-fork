@@ -270,6 +270,28 @@ static void copyGPU
 
 }
 
+static double sumProdGPU
+(
+    OpenCL& opencl,
+    cl::Kernel &kernel,
+    cl::Buffer &a_buf,
+    cl::Buffer &b_buf,
+    int n)
+{
+    double res;
+    cl::Buffer res_buf(opencl.context, CL_MEM_READ_WRITE, sizeof(double));
+    kernel.setArg(0, a_buf);
+    kernel.setArg(1, b_buf);
+    kernel.setArg(2, res_buf);
+    kernel.setArg(3, n);
+
+    opencl.queue.enqueueNDRangeKernel(kernel, cl::NullRange,
+                        cl::NDRange(n - n % locSz), cl::NDRange(locSz));
+    opencl.queue.finish();
+    opencl.queue.enqueueReadBuffer(res_buf, true, 0, sizeof(double), &res);
+    return res;
+}
+
 Foam::solverPerformance Foam::PBiCG::solveGPU
 (
     scalarField& psi_s,
@@ -354,15 +376,7 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
         // --- Initial value not used
         solveScalar wArT = 0;
 
-        // --- Select and construct the preconditioner
-        if (!preconPtr_)
-        {
-            preconPtr_ = lduMatrix::preconditioner::New
-            (
-                *this,
-                controlDict_
-            );
-        }
+        // No preconditioner
 
         // --- Solver iteration
         do
@@ -385,17 +399,7 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
             opencl.queue.enqueueReadBuffer(wT_buf, true, 0, nCells * sizeof(double), wTPtr);
 
             // --- Update search directions:
-            cl::Buffer wArT_buf(opencl.context, CL_MEM_READ_WRITE, sizeof(double));
-    
-            sumProdKernel.setArg(0, wA_buf);
-            sumProdKernel.setArg(1, rT_buf);
-            sumProdKernel.setArg(2, wArT_buf);
-            sumProdKernel.setArg(3, nCells);
-
-            opencl.queue.enqueueNDRangeKernel(sumProdKernel, cl::NullRange,
-                                        cl::NDRange(nCells - nCells % locSz), cl::NDRange(locSz));
-            opencl.queue.finish();
-            opencl.queue.enqueueReadBuffer(wArT_buf, true, 0, sizeof(double), &wArT);
+            wArT = sumProdGPU(opencl, sumProdKernel, wA_buf, rT_buf, nCells);
 
             cl::Buffer pA_buf(opencl.queue, pAPtr, pAPtr + nCells, false);
             cl::Buffer pT_buf(opencl.queue, pTPtr, pTPtr + nCells, false);
@@ -437,6 +441,7 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
             matrix_.Tmul(wT, pT, interfaceIntCoeffs_, interfaces_, cmpt);
 
             const solveScalar wApT = gSumProd(wA, pT, matrix().mesh().comm());
+            // const solveScalar wApT = sumProdGPU(opencl, sumProdKernel, wA_buf, pT_buf, nCells);
 
             // --- Test for singularity
             if (solverPerf.checkSingularity(mag(wApT)/normFactor))
