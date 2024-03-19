@@ -252,5 +252,213 @@ Foam::solverPerformance Foam::PBiCG::solve
     return solverPerf;
 }
 
+Foam::solverPerformance Foam::PBiCG::solveGPU
+(
+    scalarField& psi_s,
+    const scalarField& source,
+    OpenCL& opencl,
+    const direction cmpt
+) const
+{
+    PrecisionAdaptor<solveScalar, scalar> tpsi(psi_s);
+    solveScalarField& psi = tpsi.ref();
+
+    // --- Setup class containing solver performance data
+    solverPerformance solverPerf
+    (
+        lduMatrix::preconditioner::getName(controlDict_) + typeName,
+        fieldName_
+    );
+
+    const label nCells = psi.size();
+
+    cl::Kernel copyKernel(opencl.program, "copy");
+
+    solveScalar* __restrict__ psiPtr = psi.begin();
+
+    solveScalarField pA(nCells);
+    solveScalar* __restrict__ pAPtr = pA.begin();
+
+    solveScalarField wA(nCells);
+    solveScalar* __restrict__ wAPtr = wA.begin();
+
+    // --- Calculate A.psi
+    matrix_.Amul(wA, psi, interfaceBouCoeffs_, interfaces_, cmpt);
+
+    // --- Calculate initial residual field
+    ConstPrecisionAdaptor<solveScalar, scalar> tsource(source);
+    solveScalarField rA(tsource() - wA);
+    solveScalar* __restrict__ rAPtr = rA.begin();
+
+    matrix().setResidualField
+    (
+        ConstPrecisionAdaptor<scalar, solveScalar>(rA)(),
+        fieldName_,
+        true
+    );
+
+    // --- Calculate normalisation factor
+    const solveScalar normFactor = this->normFactor(psi, tsource(), wA, pA);
+
+    if ((log_ >= 2) || (lduMatrix::debug >= 2))
+    {
+        Info<< "   Normalisation factor = " << normFactor << endl;
+    }
+
+    // --- Calculate normalised residual norm
+    solverPerf.initialResidual() =
+        gSumMag(rA, matrix().mesh().comm())
+       /normFactor;
+    solverPerf.finalResidual() = solverPerf.initialResidual();
+
+    // --- Check convergence, solve if not converged
+    if
+    (
+        minIter_ > 0
+     || !solverPerf.checkConvergence(tolerance_, relTol_, log_)
+    )
+    {
+        solveScalarField pT(nCells, 0);
+        solveScalar* __restrict__ pTPtr = pT.begin();
+
+        solveScalarField wT(nCells);
+        solveScalar* __restrict__ wTPtr = wT.begin();
+
+        // --- Calculate T.psi
+        matrix_.Tmul(wT, psi, interfaceIntCoeffs_, interfaces_, cmpt);
+
+        // --- Calculate initial transpose residual field
+        solveScalarField rT(tsource() - wT);
+        solveScalar* __restrict__ rTPtr = rT.begin();
+
+        // --- Initial value not used
+        solveScalar wArT = 0;
+
+        // --- Select and construct the preconditioner
+        if (!preconPtr_)
+        {
+            preconPtr_ = lduMatrix::preconditioner::New
+            (
+                *this,
+                controlDict_
+            );
+        }
+        int locSz = 128;
+
+        // --- Solver iteration
+        do
+        {
+            // --- Store previous wArT
+            const solveScalar wArTold = wArT;
+            cl::Buffer wA_buf(opencl.queue, wAPtr, wAPtr + nCells, false);
+            cl::Buffer rA_buf(opencl.queue, rAPtr, rAPtr + nCells, true);
+
+            cl::Buffer wT_buf(opencl.queue, wTPtr, wTPtr + nCells, false);
+            cl::Buffer rT_buf(opencl.queue, rTPtr, rTPtr + nCells, false);
+
+            // --- Precondition residuals
+            copyKernel.setArg(0, wA_buf);
+            copyKernel.setArg(1, rA_buf);
+            copyKernel.setArg(2, nCells);
+
+            opencl.queue.enqueueNDRangeKernel(copyKernel, cl::NullRange,
+                                        cl::NDRange(nCells - nCells % locSz), cl::NDRange(locSz));
+            opencl.queue.finish();
+            opencl.queue.enqueueReadBuffer(wA_buf, true, 0, nCells * sizeof(double), wAPtr);
+
+            copyKernel.setArg(0, wT_buf);
+            copyKernel.setArg(1, rT_buf);
+            copyKernel.setArg(2, nCells);
+
+            opencl.queue.enqueueNDRangeKernel(copyKernel, cl::NullRange,
+                                        cl::NDRange(nCells - nCells % locSz), cl::NDRange(locSz));
+            opencl.queue.finish();
+            opencl.queue.enqueueReadBuffer(wT_buf, true, 0, nCells * sizeof(double), wTPtr);
+
+            // --- Update search directions:
+            wArT = gSumProd(wA, rT, matrix().mesh().comm());
+
+            if (solverPerf.nIterations() == 0)
+            {
+                for (label cell=0; cell<nCells; cell++)
+                {
+                    pAPtr[cell] = wAPtr[cell];
+                    pTPtr[cell] = wTPtr[cell];
+                }
+            }
+            else
+            {
+                const solveScalar beta = wArT/wArTold;
+                for (label cell=0; cell<nCells; cell++)
+                {
+                    pAPtr[cell] = wAPtr[cell] + beta*pAPtr[cell];
+                    pTPtr[cell] = wTPtr[cell] + beta*pTPtr[cell];
+                }
+            }
+
+
+            // --- Update preconditioned residuals
+            matrix_.Amul(wA, pA, interfaceBouCoeffs_, interfaces_, cmpt);
+            matrix_.Tmul(wT, pT, interfaceIntCoeffs_, interfaces_, cmpt);
+
+            const solveScalar wApT = gSumProd(wA, pT, matrix().mesh().comm());
+
+            // --- Test for singularity
+            if (solverPerf.checkSingularity(mag(wApT)/normFactor))
+            {
+                break;
+            }
+
+
+            // --- Update solution and residual:
+
+            const solveScalar alpha = wArT/wApT;
+            for (label cell=0; cell<nCells; cell++)
+            {
+                psiPtr[cell] += alpha*pAPtr[cell];
+                rAPtr[cell] -= alpha*wAPtr[cell];
+                rTPtr[cell] -= alpha*wTPtr[cell];
+            }
+
+            solverPerf.finalResidual() =
+                gSumMag(rA, matrix().mesh().comm())
+               /normFactor;
+        } while
+        (
+            (
+              ++solverPerf.nIterations() < maxIter_
+            && !solverPerf.checkConvergence(tolerance_, relTol_, log_)
+            )
+         || solverPerf.nIterations() < minIter_
+        );
+    }
+
+    // Recommend PBiCGStab if PBiCG fails to converge
+    const label upperMaxIters = max(maxIter_, lduMatrix::defaultMaxIter);
+
+    if (solverPerf.nIterations() > upperMaxIters)
+    {
+        FatalErrorInFunction
+            << "PBiCG has failed to converge within the maximum iterations: "
+            << upperMaxIters << nl
+            << "    Please try the more robust PBiCGStab solver."
+            << exit(FatalError);
+    }
+
+    if (preconPtr_)
+    {
+        preconPtr_->setFinished(solverPerf);
+    }
+
+    matrix().setResidualField
+    (
+        ConstPrecisionAdaptor<scalar, solveScalar>(rA)(),
+        fieldName_,
+        false
+    );
+
+    return solverPerf;
+}
+
 
 // ************************************************************************* //

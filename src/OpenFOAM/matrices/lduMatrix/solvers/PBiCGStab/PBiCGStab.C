@@ -484,7 +484,7 @@ Foam::solverPerformance Foam::PBiCGStab::scalarSolveGPU
             }
 
             // --- Precondition pA
-            preconPtr_->preconditionGPU(opencl, yA, pA, cmpt);
+            preconPtr_->precondition(yA, pA, cmpt);
 
             // --- Calculate AyA
             matrix_.Amul(AyA, yA, interfaceBouCoeffs_, interfaces_, cmpt);
