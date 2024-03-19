@@ -273,6 +273,7 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
     const label nCells = psi.size();
 
     cl::Kernel copyKernel(opencl.program, "copy");
+    cl::Kernel sumProdKernel(opencl.program, "sumProd");
 
     solveScalar* __restrict__ psiPtr = psi.begin();
 
@@ -354,7 +355,7 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
             cl::Buffer rA_buf(opencl.queue, rAPtr, rAPtr + nCells, true);
 
             cl::Buffer wT_buf(opencl.queue, wTPtr, wTPtr + nCells, false);
-            cl::Buffer rT_buf(opencl.queue, rTPtr, rTPtr + nCells, false);
+            cl::Buffer rT_buf(opencl.queue, rTPtr, rTPtr + nCells, true);
 
             // --- Precondition residuals
             copyKernel.setArg(0, wA_buf);
@@ -376,15 +377,45 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
             opencl.queue.enqueueReadBuffer(wT_buf, true, 0, nCells * sizeof(double), wTPtr);
 
             // --- Update search directions:
-            wArT = gSumProd(wA, rT, matrix().mesh().comm());
+            cl::Buffer wArT_buf(opencl.context, CL_MEM_READ_WRITE, sizeof(double));
+    
+            sumProdKernel.setArg(0, wA_buf);
+            sumProdKernel.setArg(1, rT_buf);
+            sumProdKernel.setArg(2, wArT_buf);
+            sumProdKernel.setArg(3, nCells);
+
+            opencl.queue.enqueueNDRangeKernel(sumProdKernel, cl::NullRange,
+                                        cl::NDRange(nCells - nCells % locSz), cl::NDRange(locSz));
+            opencl.queue.finish();
+            opencl.queue.enqueueReadBuffer(wArT_buf, true, 0, sizeof(double), &wArT);
+
+            cl::Buffer pA_buf(opencl.queue, pAPtr, pAPtr + nCells, false);
+            cl::Buffer pT_buf(opencl.queue, pTPtr, pTPtr + nCells, false);
 
             if (solverPerf.nIterations() == 0)
             {
-                for (label cell=0; cell<nCells; cell++)
+                copyKernel.setArg(0, pA_buf);
+                copyKernel.setArg(1, wA_buf);
+                copyKernel.setArg(2, nCells);
+
+                opencl.queue.enqueueNDRangeKernel(copyKernel, cl::NullRange,
+                                            cl::NDRange(nCells - nCells % locSz), cl::NDRange(locSz));
+                opencl.queue.finish();
+                opencl.queue.enqueueReadBuffer(pA_buf, true, 0, nCells * sizeof(double), pAPtr);
+
+                copyKernel.setArg(0, pT_buf);
+                copyKernel.setArg(1, wT_buf);
+                copyKernel.setArg(2, nCells);
+
+                opencl.queue.enqueueNDRangeKernel(copyKernel, cl::NullRange,
+                                            cl::NDRange(nCells - nCells % locSz), cl::NDRange(locSz));
+                opencl.queue.finish();
+                opencl.queue.enqueueReadBuffer(pT_buf, true, 0, nCells * sizeof(double), pTPtr);
+                /*for (label cell=0; cell<nCells; cell++)
                 {
                     pAPtr[cell] = wAPtr[cell];
                     pTPtr[cell] = wTPtr[cell];
-                }
+                }*/
             }
             else
             {
