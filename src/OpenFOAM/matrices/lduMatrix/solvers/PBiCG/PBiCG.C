@@ -252,6 +252,24 @@ Foam::solverPerformance Foam::PBiCG::solve
     return solverPerf;
 }
 
+static const int locSz = 128;
+
+static void copyGPU
+(
+    OpenCL& opencl,
+    cl::Kernel &kernel,
+    cl::Buffer &dst,
+    cl::Buffer &src,
+    int n)
+{
+    kernel.setArg(0, dst);
+    kernel.setArg(1, src);
+    kernel.setArg(2, n);
+    opencl.queue.enqueueNDRangeKernel(kernel, cl::NullRange,
+                cl::NDRange(n - n % locSz), cl::NDRange(locSz));
+
+}
+
 Foam::solverPerformance Foam::PBiCG::solveGPU
 (
     scalarField& psi_s,
@@ -274,6 +292,7 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
 
     cl::Kernel copyKernel(opencl.program, "copy");
     cl::Kernel sumProdKernel(opencl.program, "sumProd");
+    cl::Kernel multAddKernel(opencl.program, "multAdd");
 
     solveScalar* __restrict__ psiPtr = psi.begin();
 
@@ -344,7 +363,6 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
                 controlDict_
             );
         }
-        int locSz = 128;
 
         // --- Solver iteration
         do
@@ -358,21 +376,11 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
             cl::Buffer rT_buf(opencl.queue, rTPtr, rTPtr + nCells, true);
 
             // --- Precondition residuals
-            copyKernel.setArg(0, wA_buf);
-            copyKernel.setArg(1, rA_buf);
-            copyKernel.setArg(2, nCells);
-
-            opencl.queue.enqueueNDRangeKernel(copyKernel, cl::NullRange,
-                                        cl::NDRange(nCells - nCells % locSz), cl::NDRange(locSz));
+            copyGPU(opencl, copyKernel, wA_buf, rA_buf, nCells);
             opencl.queue.finish();
             opencl.queue.enqueueReadBuffer(wA_buf, true, 0, nCells * sizeof(double), wAPtr);
 
-            copyKernel.setArg(0, wT_buf);
-            copyKernel.setArg(1, rT_buf);
-            copyKernel.setArg(2, nCells);
-
-            opencl.queue.enqueueNDRangeKernel(copyKernel, cl::NullRange,
-                                        cl::NDRange(nCells - nCells % locSz), cl::NDRange(locSz));
+            copyGPU(opencl, copyKernel, wT_buf, rT_buf, nCells);
             opencl.queue.finish();
             opencl.queue.enqueueReadBuffer(wT_buf, true, 0, nCells * sizeof(double), wTPtr);
 
@@ -394,39 +402,35 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
 
             if (solverPerf.nIterations() == 0)
             {
-                copyKernel.setArg(0, pA_buf);
-                copyKernel.setArg(1, wA_buf);
-                copyKernel.setArg(2, nCells);
-
-                opencl.queue.enqueueNDRangeKernel(copyKernel, cl::NullRange,
-                                            cl::NDRange(nCells - nCells % locSz), cl::NDRange(locSz));
+                copyGPU(opencl, copyKernel, pA_buf, wA_buf, nCells);
                 opencl.queue.finish();
                 opencl.queue.enqueueReadBuffer(pA_buf, true, 0, nCells * sizeof(double), pAPtr);
 
-                copyKernel.setArg(0, pT_buf);
-                copyKernel.setArg(1, wT_buf);
-                copyKernel.setArg(2, nCells);
-
-                opencl.queue.enqueueNDRangeKernel(copyKernel, cl::NullRange,
-                                            cl::NDRange(nCells - nCells % locSz), cl::NDRange(locSz));
+                copyGPU(opencl, copyKernel, pT_buf, wT_buf, nCells);
                 opencl.queue.finish();
                 opencl.queue.enqueueReadBuffer(pT_buf, true, 0, nCells * sizeof(double), pTPtr);
-                /*for (label cell=0; cell<nCells; cell++)
-                {
-                    pAPtr[cell] = wAPtr[cell];
-                    pTPtr[cell] = wTPtr[cell];
-                }*/
             }
             else
             {
                 const solveScalar beta = wArT/wArTold;
-                for (label cell=0; cell<nCells; cell++)
-                {
-                    pAPtr[cell] = wAPtr[cell] + beta*pAPtr[cell];
-                    pTPtr[cell] = wTPtr[cell] + beta*pTPtr[cell];
-                }
-            }
+                multAddKernel.setArg(0, pA_buf);
+                multAddKernel.setArg(1, wA_buf);
+                multAddKernel.setArg(2, beta);
+                multAddKernel.setArg(3, nCells);
+                opencl.queue.enqueueNDRangeKernel(multAddKernel, cl::NullRange,
+                                            cl::NDRange(nCells - nCells % locSz), cl::NDRange(locSz));
+                opencl.queue.finish();
+                opencl.queue.enqueueReadBuffer(pA_buf, true, 0, nCells * sizeof(double), pAPtr);
 
+                multAddKernel.setArg(0, pT_buf);
+                multAddKernel.setArg(1, wT_buf);
+                multAddKernel.setArg(2, beta);
+                multAddKernel.setArg(3, nCells);
+                opencl.queue.enqueueNDRangeKernel(multAddKernel, cl::NullRange,
+                                            cl::NDRange(nCells - nCells % locSz), cl::NDRange(locSz));
+                opencl.queue.finish();
+                opencl.queue.enqueueReadBuffer(pT_buf, true, 0, nCells * sizeof(double), pTPtr);
+            }
 
             // --- Update preconditioned residuals
             matrix_.Amul(wA, pA, interfaceBouCoeffs_, interfaces_, cmpt);

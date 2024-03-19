@@ -61,3 +61,19 @@ kernel void copy(global double *dst,
             dst[j] = src[j];
     }
 }
+
+// b = a + k * b
+kernel void multAdd(global double *b,
+                const global double *a,
+                double k,
+                int N)
+{
+    int i = get_global_id(0);
+    int n = get_global_size(0);
+    if (i < n - 1) {
+        b[i] = a[i] + k * b[i];
+    } else {
+        for (int j = n - 1; j < N; j++)
+            b[j] = a[j] + k * b[j];
+    }
+}
