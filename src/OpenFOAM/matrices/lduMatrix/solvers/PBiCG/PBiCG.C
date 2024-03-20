@@ -437,7 +437,7 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
             }
 
             // --- Update preconditioned residuals
-            matrix_.Amul(wA, pA, interfaceBouCoeffs_, interfaces_, cmpt);
+            matrix_.AmulGPU(opencl, wA, pA);
             matrix_.Tmul(wT, pT, interfaceIntCoeffs_, interfaces_, cmpt);
 
             const solveScalar wApT = gSumProd(wA, pT, matrix().mesh().comm());

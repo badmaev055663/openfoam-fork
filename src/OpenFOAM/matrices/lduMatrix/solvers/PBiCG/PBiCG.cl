@@ -77,3 +77,19 @@ kernel void multAdd(global double *b,
             b[j] = a[j] + k * b[j];
     }
 }
+
+// c = a * b
+kernel void mult(const global double *a,
+                const global double *b,
+                global double *c,
+                int N)
+{
+    int i = get_global_id(0);
+    int n = get_global_size(0);
+    if (i < n - 1) {
+        c[i] = a[i] * b[i];
+    } else {
+        for (int j = n - 1; j < N; j++)
+            c[j] = a[j] * b[j];
+    }
+}

@@ -721,6 +721,13 @@ public:
                 const direction cmpt
             ) const;
 
+            void AmulGPU
+            (
+                OpenCL&,
+                solveScalarField&,
+                const tmp<solveScalarField>&
+            ) const;
+
             //- Matrix transpose multiplication with updated interfaces.
             void Tmul
             (

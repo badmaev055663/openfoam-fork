@@ -70,7 +70,7 @@ void Foam::lduMatrix::Amul
     );
 
     const label nCells = diag().size();
-    #pragma omp simd
+
     for (label cell=0; cell<nCells; cell++)
     {
         ApsiPtr[cell] = diagPtr[cell]*psiPtr[cell];
@@ -96,6 +96,54 @@ void Foam::lduMatrix::Amul
         cmpt,
         startRequest
     );
+
+    tpsi.clear();
+}
+
+void Foam::lduMatrix::AmulGPU
+(
+    OpenCL& opencl,
+    solveScalarField& Apsi,
+    const tmp<solveScalarField>& tpsi
+) const
+{
+    solveScalar* __restrict__ ApsiPtr = Apsi.begin();
+    cl::Kernel multKernel(opencl.program, "mult");
+
+    const solveScalarField& psi = tpsi();
+    solveScalar* const __restrict__ psiPtr = const_cast<scalar*>(psi.begin());
+
+    scalar* const __restrict__ diagPtr = const_cast<scalar*>(diag().begin());
+
+    const label* const __restrict__ uPtr = lduAddr().upperAddr().begin();
+    const label* const __restrict__ lPtr = lduAddr().lowerAddr().begin();
+
+    const scalar* const __restrict__ upperPtr = upper().begin();
+    const scalar* const __restrict__ lowerPtr = lower().begin();
+
+    const label nCells = diag().size();
+    const int locSz = 128;
+
+    cl::Buffer Apsi_buf(opencl.queue, ApsiPtr, ApsiPtr + nCells, false);
+    cl::Buffer diag_buf(opencl.queue, diagPtr, diagPtr + nCells, true);
+    cl::Buffer psi_buf(opencl.queue, psiPtr, psiPtr + nCells, true);
+
+    multKernel.setArg(0, diag_buf);
+    multKernel.setArg(1, psi_buf);
+    multKernel.setArg(2, Apsi_buf);
+    multKernel.setArg(3, nCells);
+    opencl.queue.enqueueNDRangeKernel(multKernel, cl::NullRange,
+                                cl::NDRange(nCells - nCells % locSz), cl::NDRange(locSz));
+    opencl.queue.finish();
+    opencl.queue.enqueueReadBuffer(Apsi_buf, true, 0, nCells * sizeof(double), ApsiPtr);
+
+    const label nFaces = upper().size();
+
+    for (label face=0; face<nFaces; face++)
+    {
+        ApsiPtr[uPtr[face]] += lowerPtr[face]*psiPtr[lPtr[face]];
+        ApsiPtr[lPtr[face]] += upperPtr[face]*psiPtr[uPtr[face]];
+    }
 
     tpsi.clear();
 }
