@@ -1,4 +1,26 @@
+#pragma OPENCL EXTENSION cl_khr_fp64: enable
+
+#pragma OPENCL EXTENSION cl_khr_int64_base_atomics: enable
+
 #define BUFFSIZE 2048
+// hack from internet - it seems working
+double atomic_dadd(__global double *valq, double delta) {
+    union {
+        double f;
+        unsigned long i;
+    } old;
+
+    union {
+        double f;
+        unsigned long i;
+    } new1;
+
+    do {
+        old.f = *valq;
+        new1.f = old.f + delta;
+    } while (atom_cmpxchg((volatile __global unsigned long *)valq, old.i, new1.i) != old.i);
+    return old.f;
+}  
 
 // g - global
 // l - local
@@ -92,4 +114,30 @@ kernel void mult(const global double *a,
         for (int j = n - 1; j < N; j++)
             c[j] = a[j] * b[j];
     }
+}
+
+kernel void lduMul(global double *res,
+                const global double *psiPtr,
+                const global double *lowerPtr,
+                const global double *upperPtr,
+                const global int *lPtr,
+                const global int *uPtr,
+                int N)
+{
+    int i = get_global_id(0);
+    int n = get_global_size(0);
+    if (i < n - 1) {
+        double tmp1 = lowerPtr[i] * psiPtr[lPtr[i]];
+        atomic_dadd(&res[uPtr[i]], tmp1);
+        double tmp2 = upperPtr[i] * psiPtr[uPtr[i]];
+        atomic_dadd(&res[lPtr[i]], tmp2);
+    } else {
+        for (int j = n - 1; j < N; j++) {
+            double tmp1 = lowerPtr[j] * psiPtr[lPtr[j]];
+            atomic_dadd(&res[uPtr[j]], tmp1);
+            double tmp2 = upperPtr[j] * psiPtr[uPtr[j]];
+            atomic_dadd(&res[lPtr[j]], tmp2);
+        }
+    }
+
 }

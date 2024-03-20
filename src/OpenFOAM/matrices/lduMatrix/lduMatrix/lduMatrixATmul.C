@@ -109,17 +109,18 @@ void Foam::lduMatrix::AmulGPU
 {
     solveScalar* __restrict__ ApsiPtr = Apsi.begin();
     cl::Kernel multKernel(opencl.program, "mult");
+    cl::Kernel lduKernel(opencl.program, "lduMul");
 
     const solveScalarField& psi = tpsi();
     solveScalar* const __restrict__ psiPtr = const_cast<scalar*>(psi.begin());
 
     scalar* const __restrict__ diagPtr = const_cast<scalar*>(diag().begin());
 
-    const label* const __restrict__ uPtr = lduAddr().upperAddr().begin();
-    const label* const __restrict__ lPtr = lduAddr().lowerAddr().begin();
+    label* const __restrict__ uPtr = const_cast<label*>(lduAddr().upperAddr().begin());
+    label* const __restrict__ lPtr = const_cast<label*>(lduAddr().lowerAddr().begin());
 
-    const scalar* const __restrict__ upperPtr = upper().begin();
-    const scalar* const __restrict__ lowerPtr = lower().begin();
+    scalar* const __restrict__ upperPtr = const_cast<scalar*>(upper().begin());
+    scalar* const __restrict__ lowerPtr = const_cast<scalar*>(lower().begin());
 
     const label nCells = diag().size();
     const int locSz = 128;
@@ -138,12 +139,23 @@ void Foam::lduMatrix::AmulGPU
     opencl.queue.enqueueReadBuffer(Apsi_buf, true, 0, nCells * sizeof(double), ApsiPtr);
 
     const label nFaces = upper().size();
+    cl::Buffer lower_buf(opencl.queue, lowerPtr, lowerPtr + nFaces, true);
+    cl::Buffer upper_buf(opencl.queue, upperPtr, upperPtr + nFaces, true);
 
-    for (label face=0; face<nFaces; face++)
-    {
-        ApsiPtr[uPtr[face]] += lowerPtr[face]*psiPtr[lPtr[face]];
-        ApsiPtr[lPtr[face]] += upperPtr[face]*psiPtr[uPtr[face]];
-    }
+    cl::Buffer l_buf(opencl.queue, lPtr, lPtr + nFaces, true);
+    cl::Buffer u_buf(opencl.queue, uPtr, uPtr + nFaces, true);
+
+    lduKernel.setArg(0, Apsi_buf);
+    lduKernel.setArg(1, psi_buf);
+    lduKernel.setArg(2, lower_buf);
+    lduKernel.setArg(3, upper_buf);
+    lduKernel.setArg(4, l_buf);
+    lduKernel.setArg(5, u_buf);
+    lduKernel.setArg(6, nFaces);
+    opencl.queue.enqueueNDRangeKernel(lduKernel, cl::NullRange,
+                                cl::NDRange(nFaces - nFaces % locSz), cl::NDRange(locSz));
+    opencl.queue.finish();
+    opencl.queue.enqueueReadBuffer(Apsi_buf, true, 0, nCells * sizeof(double), ApsiPtr);
 
     tpsi.clear();
 }
