@@ -725,7 +725,8 @@ public:
             (
                 OpenCL&,
                 solveScalarField&,
-                const tmp<solveScalarField>&
+                cl::Buffer&,
+                cl::Buffer&
             ) const;
 
             //- Matrix transpose multiplication with updated interfaces.

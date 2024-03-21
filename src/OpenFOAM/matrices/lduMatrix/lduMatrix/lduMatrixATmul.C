@@ -104,15 +104,13 @@ void Foam::lduMatrix::AmulGPU
 (
     OpenCL& opencl,
     solveScalarField& Apsi,
-    const tmp<solveScalarField>& tpsi
+    cl::Buffer& Apsi_buf,
+    cl::Buffer& psi_buf
 ) const
 {
     solveScalar* __restrict__ ApsiPtr = Apsi.begin();
     cl::Kernel multKernel(opencl.program, "mult");
     cl::Kernel lduKernel(opencl.program, "lduMul");
-
-    const solveScalarField& psi = tpsi();
-    solveScalar* const __restrict__ psiPtr = const_cast<scalar*>(psi.begin());
 
     scalar* const __restrict__ diagPtr = const_cast<scalar*>(diag().begin());
 
@@ -125,9 +123,7 @@ void Foam::lduMatrix::AmulGPU
     const label nCells = diag().size();
     const int locSz = 128;
 
-    cl::Buffer Apsi_buf(opencl.queue, ApsiPtr, ApsiPtr + nCells, false);
     cl::Buffer diag_buf(opencl.queue, diagPtr, diagPtr + nCells, true);
-    cl::Buffer psi_buf(opencl.queue, psiPtr, psiPtr + nCells, true);
 
     multKernel.setArg(0, diag_buf);
     multKernel.setArg(1, psi_buf);
@@ -156,8 +152,6 @@ void Foam::lduMatrix::AmulGPU
                                 cl::NDRange(nFaces - nFaces % locSz), cl::NDRange(locSz));
     opencl.queue.finish();
     opencl.queue.enqueueReadBuffer(Apsi_buf, true, 0, nCells * sizeof(double), ApsiPtr);
-
-    tpsi.clear();
 }
 
 
