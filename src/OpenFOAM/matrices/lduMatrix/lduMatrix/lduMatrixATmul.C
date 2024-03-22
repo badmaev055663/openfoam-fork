@@ -218,6 +218,60 @@ void Foam::lduMatrix::Tmul
     tpsi.clear();
 }
 
+void Foam::lduMatrix::TmulGPU
+(
+    OpenCL& opencl,
+    solveScalarField& Tpsi,
+    cl::Buffer& Tpsi_buf,
+    cl::Buffer& psi_buf
+) const
+{
+    solveScalar* __restrict__ TpsiPtr = Tpsi.begin();
+    cl::Kernel multKernel(opencl.program, "mult");
+    cl::Kernel lduKernel(opencl.program, "lduMul");
+
+    scalar* const __restrict__ diagPtr = const_cast<scalar*>(diag().begin());
+
+    label* const __restrict__ uPtr = const_cast<label*>(lduAddr().upperAddr().begin());
+    label* const __restrict__ lPtr = const_cast<label*>(lduAddr().lowerAddr().begin());
+
+    scalar* const __restrict__ upperPtr = const_cast<scalar*>(upper().begin());
+    scalar* const __restrict__ lowerPtr = const_cast<scalar*>(lower().begin());
+
+    const label nCells = diag().size();
+    const int locSz = 128;
+
+    cl::Buffer diag_buf(opencl.queue, diagPtr, diagPtr + nCells, true);
+
+    multKernel.setArg(0, diag_buf);
+    multKernel.setArg(1, psi_buf);
+    multKernel.setArg(2, Tpsi_buf);
+    multKernel.setArg(3, nCells);
+    opencl.queue.enqueueNDRangeKernel(multKernel, cl::NullRange,
+                                cl::NDRange(nCells - nCells % locSz), cl::NDRange(locSz));
+    opencl.queue.finish();
+    opencl.queue.enqueueReadBuffer(Tpsi_buf, true, 0, nCells * sizeof(double), TpsiPtr);
+
+    const label nFaces = upper().size();
+    cl::Buffer lower_buf(opencl.queue, lowerPtr, lowerPtr + nFaces, true);
+    cl::Buffer upper_buf(opencl.queue, upperPtr, upperPtr + nFaces, true);
+
+    cl::Buffer l_buf(opencl.queue, lPtr, lPtr + nFaces, true);
+    cl::Buffer u_buf(opencl.queue, uPtr, uPtr + nFaces, true);
+
+    lduKernel.setArg(0, Tpsi_buf);
+    lduKernel.setArg(1, psi_buf);
+    lduKernel.setArg(2, upper_buf);
+    lduKernel.setArg(3, lower_buf);
+    lduKernel.setArg(4, l_buf);
+    lduKernel.setArg(5, u_buf);
+    lduKernel.setArg(6, nFaces);
+    opencl.queue.enqueueNDRangeKernel(lduKernel, cl::NullRange,
+                                cl::NDRange(nFaces - nFaces % locSz), cl::NDRange(locSz));
+    opencl.queue.finish();
+    opencl.queue.enqueueReadBuffer(Tpsi_buf, true, 0, nCells * sizeof(double), TpsiPtr);
+}
+
 
 void Foam::lduMatrix::sumA
 (

@@ -739,6 +739,14 @@ public:
                 const direction cmpt
             ) const;
 
+            void TmulGPU
+            (
+                OpenCL&,
+                solveScalarField&,
+                cl::Buffer&,
+                cl::Buffer&
+            ) const;
+
 
             //- Sum the coefficients on each row of the matrix
             void sumA
