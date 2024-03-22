@@ -103,7 +103,7 @@ int main(int argc, char *argv[])
     cl::Device device = devices[0];
 
     std::string baseDir = std::getenv("WM_PROJECT_DIR");
-    std::ifstream srcFile(baseDir + "/src/OpenFOAM/matrices/lduMatrix/solvers/PBiCG/PBiCG.cl");
+    std::ifstream srcFile(baseDir + "/src/OpenFOAM/matrices/lduMatrix/solvers/kernels.cl");
     std::string kernelSrc((std::istreambuf_iterator<char>(srcFile)),
                     std::istreambuf_iterator<char>());
 

@@ -139,5 +139,21 @@ kernel void lduMul(global double *res,
             atomic_dadd(&res[lPtr[j]], tmp2);
         }
     }
+}
 
+// b += a * k
+kernel void AddMult(global double *b,
+                const global double *a,
+                double k,
+                int N)
+{
+    int i = get_global_id(0);
+    int n = get_global_size(0);
+    if (i < n - 1) {
+        b[i] += a[i] * k;
+    } else {
+        for (int j = n - 1; j < N; j++) {
+            b[j] += a[j] * k;
+        }
+    }
 }
