@@ -726,6 +726,11 @@ public:
                 OpenCL&,
                 solveScalarField&,
                 cl::Buffer&,
+                cl::Buffer&,
+                cl::Buffer&,
+                cl::Buffer&,
+                cl::Buffer&,
+                cl::Buffer&,
                 cl::Buffer&
             ) const;
 
@@ -743,6 +748,11 @@ public:
             (
                 OpenCL&,
                 solveScalarField&,
+                cl::Buffer&,
+                cl::Buffer&,
+                cl::Buffer&,
+                cl::Buffer&,
+                cl::Buffer&,
                 cl::Buffer&,
                 cl::Buffer&
             ) const;

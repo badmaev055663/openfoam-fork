@@ -424,7 +424,10 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
         cl::Buffer pA_buf(opencl.queue, pAPtr, pAPtr + nCells, false);
         cl::Buffer pT_buf(opencl.queue, pTPtr, pTPtr + nCells, false);
         cl::Buffer psi_buf(opencl.queue, psiPtr, psiPtr + nCells, false);
-      
+
+        cl::Buffer rA_buf(opencl.queue, rAPtr, rAPtr + nCells, false);
+        cl::Buffer rT_buf(opencl.queue, rTPtr, rTPtr + nCells, false);
+ 
         // No preconditioner
 
         // --- Solver iteration
@@ -432,8 +435,6 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
         {
             // --- Store previous wArT
             const solveScalar wArTold = wArT;
-            cl::Buffer rA_buf(opencl.queue, rAPtr, rAPtr + nCells, false);
-            cl::Buffer rT_buf(opencl.queue, rTPtr, rTPtr + nCells, false);
 
             // --- Precondition residuals
             copyGPU(opencl, copyKernel, wA_buf, rA_buf, nCells);
@@ -478,10 +479,27 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
                 opencl.queue.finish();
                 opencl.queue.enqueueReadBuffer(pT_buf, true, 0, nCells * sizeof(double), pTPtr);
             }
+            scalar* const __restrict__ diagPtr = const_cast<scalar*>(matrix_.diag().begin());
+
+            cl::Buffer diag_buf(opencl.queue, diagPtr, diagPtr + nCells, true);
+
+            label* const __restrict__ uPtr = const_cast<label*>(matrix_.lduAddr().upperAddr().begin());
+            label* const __restrict__ lPtr = const_cast<label*>(matrix_.lduAddr().lowerAddr().begin());
+
+            scalar* const __restrict__ upperPtr = const_cast<scalar*>(matrix_.upper().begin());
+            scalar* const __restrict__ lowerPtr = const_cast<scalar*>(matrix_.lower().begin());
+
+            const label nFaces = matrix_.upper().size();
+            
+            cl::Buffer lower_buf(opencl.queue, lowerPtr, lowerPtr + nFaces, true);
+            cl::Buffer upper_buf(opencl.queue, upperPtr, upperPtr + nFaces, true);
+
+            cl::Buffer l_buf(opencl.queue, lPtr, lPtr + nFaces, true);
+            cl::Buffer u_buf(opencl.queue, uPtr, uPtr + nFaces, true);
 
             // --- Update preconditioned residuals
-            matrix_.AmulGPU(opencl, wA, wA_buf, pA_buf);
-            matrix_.TmulGPU(opencl, wT, wT_buf, pT_buf);
+            matrix_.AmulGPU(opencl, wA, wA_buf, pA_buf, diag_buf, lower_buf, upper_buf, l_buf, u_buf);
+            matrix_.TmulGPU(opencl, wT, wT_buf, pT_buf, diag_buf, lower_buf, upper_buf, l_buf, u_buf);
 
             const solveScalar wApT = sumProdGPU(opencl, sumProdKernel, wA_buf, pT_buf, nCells);          
 
