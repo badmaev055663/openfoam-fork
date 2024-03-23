@@ -292,6 +292,27 @@ static double sumProdGPU
     return res;
 }
 
+static void addMultGPU
+(
+    OpenCL& opencl,
+    cl::Kernel &kernel,
+    cl::Buffer &a_buf,
+    cl::Buffer &b_buf,
+    double *ptr,
+    double k,
+    int n)
+{
+    kernel.setArg(0, a_buf);
+    kernel.setArg(1, b_buf);
+    kernel.setArg(2, k);
+    kernel.setArg(3, n);
+
+    opencl.queue.enqueueNDRangeKernel(kernel, cl::NullRange,
+                        cl::NDRange(n - n % locSz), cl::NDRange(locSz));
+    opencl.queue.finish();
+    opencl.queue.enqueueReadBuffer(b_buf, true, 0, sizeof(double) * n, ptr);
+}
+
 Foam::solverPerformance Foam::PBiCG::solveGPU
 (
     scalarField& psi_s,
@@ -315,6 +336,7 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
     cl::Kernel copyKernel(opencl.program, "copy");
     cl::Kernel sumProdKernel(opencl.program, "sumProd");
     cl::Kernel multAddKernel(opencl.program, "multAdd");
+    cl::Kernel addMultKernel(opencl.program, "addMult");
 
     solveScalar* __restrict__ psiPtr = psi.begin();
 
@@ -375,7 +397,13 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
 
         // --- Initial value not used
         solveScalar wArT = 0;
+        cl::Buffer wA_buf(opencl.queue, wAPtr, wAPtr + nCells, false);
+        cl::Buffer wT_buf(opencl.queue, wTPtr, wTPtr + nCells, false);
 
+        cl::Buffer pA_buf(opencl.queue, pAPtr, pAPtr + nCells, false);
+        cl::Buffer pT_buf(opencl.queue, pTPtr, pTPtr + nCells, false);
+        cl::Buffer psi_buf(opencl.queue, psiPtr, psiPtr + nCells, false);
+      
         // No preconditioner
 
         // --- Solver iteration
@@ -383,11 +411,8 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
         {
             // --- Store previous wArT
             const solveScalar wArTold = wArT;
-            cl::Buffer wA_buf(opencl.queue, wAPtr, wAPtr + nCells, false);
-            cl::Buffer rA_buf(opencl.queue, rAPtr, rAPtr + nCells, true);
-
-            cl::Buffer wT_buf(opencl.queue, wTPtr, wTPtr + nCells, false);
-            cl::Buffer rT_buf(opencl.queue, rTPtr, rTPtr + nCells, true);
+            cl::Buffer rA_buf(opencl.queue, rAPtr, rAPtr + nCells, false);
+            cl::Buffer rT_buf(opencl.queue, rTPtr, rTPtr + nCells, false);
 
             // --- Precondition residuals
             copyGPU(opencl, copyKernel, wA_buf, rA_buf, nCells);
@@ -400,9 +425,6 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
 
             // --- Update search directions:
             wArT = sumProdGPU(opencl, sumProdKernel, wA_buf, rT_buf, nCells);
-
-            cl::Buffer pA_buf(opencl.queue, pAPtr, pAPtr + nCells, false);
-            cl::Buffer pT_buf(opencl.queue, pTPtr, pTPtr + nCells, false);
 
             if (solverPerf.nIterations() == 0)
             {
@@ -440,8 +462,7 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
             matrix_.AmulGPU(opencl, wA, wA_buf, pA_buf);
             matrix_.TmulGPU(opencl, wT, wT_buf, pT_buf);
 
-            const solveScalar wApT = gSumProd(wA, pT, matrix().mesh().comm());
-            // const solveScalar wApT = sumProdGPU(opencl, sumProdKernel, wA_buf, pT_buf, nCells);
+            const solveScalar wApT = sumProdGPU(opencl, sumProdKernel, wA_buf, pT_buf, nCells);          
 
             // --- Test for singularity
             if (solverPerf.checkSingularity(mag(wApT)/normFactor))
@@ -449,17 +470,13 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
                 break;
             }
 
-
             // --- Update solution and residual:
 
             const solveScalar alpha = wArT/wApT;
-            for (label cell=0; cell<nCells; cell++)
-            {
-                psiPtr[cell] += alpha*pAPtr[cell];
-                rAPtr[cell] -= alpha*wAPtr[cell];
-                rTPtr[cell] -= alpha*wTPtr[cell];
-            }
-
+            addMultGPU(opencl, addMultKernel, pA_buf, psi_buf, psiPtr, alpha, nCells);
+            addMultGPU(opencl, addMultKernel, wA_buf, rA_buf, rAPtr, -alpha, nCells);
+            addMultGPU(opencl, addMultKernel, wT_buf, rT_buf, rTPtr, -alpha, nCells);
+      
             solverPerf.finalResidual() =
                 gSumMag(rA, matrix().mesh().comm())
                /normFactor;

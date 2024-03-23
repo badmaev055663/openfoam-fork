@@ -142,8 +142,8 @@ kernel void lduMul(global double *res,
 }
 
 // b += a * k
-kernel void AddMult(global double *b,
-                const global double *a,
+kernel void addMult(const global double *a,
+                global double *b,
                 double k,
                 int N)
 {
