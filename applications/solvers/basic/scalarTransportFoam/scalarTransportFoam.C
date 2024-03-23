@@ -91,7 +91,16 @@ int main(int argc, char *argv[])
         InfoErr << "Unable to find OpenCL platforms\n";
         return 0;
     }
-    cl::Platform platform = platforms[0];
+    int plat = 0;
+    const char *platEnv = std::getenv("FOAM_OCL_PLATFORM");
+    if (platEnv) {
+        plat = std::stoi(std::string(platEnv));
+        if (plat >= platforms.size() || plat < 0) {
+            InfoErr << "Invalid platfrom index: " << plat << endl;
+            return 0;
+        }
+    }
+    cl::Platform platform = platforms[plat];
     Info << "Platform name: " << platform.getInfo<CL_PLATFORM_NAME>() << '\n';
 
     cl_context_properties properties[] =
@@ -100,6 +109,10 @@ int main(int argc, char *argv[])
 
     // get all devices associated with the context
     std::vector<cl::Device> devices = context.getInfo<CL_CONTEXT_DEVICES>();
+    if (devices.size() == 0) {
+        InfoErr << "Zero devices for platform " << plat << endl;
+        return 0;
+    }
     cl::Device device = devices[0];
 
     std::string baseDir = std::getenv("WM_PROJECT_DIR");
