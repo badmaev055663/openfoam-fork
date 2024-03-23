@@ -318,7 +318,6 @@ static void addMultGPU
     cl::Kernel &kernel,
     cl::Buffer &a_buf,
     cl::Buffer &b_buf,
-    double *ptr,
     double k,
     int n)
 {
@@ -329,8 +328,6 @@ static void addMultGPU
 
     opencl.queue.enqueueNDRangeKernel(kernel, cl::NullRange,
                         cl::NDRange(n - n % locSz), cl::NDRange(locSz));
-    opencl.queue.finish();
-    opencl.queue.enqueueReadBuffer(b_buf, true, 0, sizeof(double) * n, ptr);
 }
 
 Foam::solverPerformance Foam::PBiCG::solveGPU
@@ -513,9 +510,13 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
             // --- Update solution and residual:
 
             const solveScalar alpha = wArT/wApT;
-            addMultGPU(opencl, addMultKernel, pA_buf, psi_buf, psiPtr, alpha, nCells);
-            addMultGPU(opencl, addMultKernel, wA_buf, rA_buf, rAPtr, -alpha, nCells);
-            addMultGPU(opencl, addMultKernel, wT_buf, rT_buf, rTPtr, -alpha, nCells);
+            addMultGPU(opencl, addMultKernel, pA_buf, psi_buf, alpha, nCells);
+            addMultGPU(opencl, addMultKernel, wA_buf, rA_buf, -alpha, nCells);
+            addMultGPU(opencl, addMultKernel, wT_buf, rT_buf, -alpha, nCells);
+            opencl.queue.finish();
+            opencl.queue.enqueueReadBuffer(psi_buf, true, 0, sizeof(double) * nCells, psiPtr);
+            opencl.queue.enqueueReadBuffer(rA_buf, true, 0, sizeof(double) * nCells, rAPtr);
+            opencl.queue.enqueueReadBuffer(rT_buf, true, 0, sizeof(double) * nCells, rTPtr);
       
             solverPerf.finalResidual() =
                 sumMagGPU(opencl, sumMagKernel, rA_buf, nCells) / normFactor;
