@@ -35,6 +35,16 @@ double dot_product_g(const global double *a,
     return res;
 }
 
+double sum_abs(const global double *a,
+                int n)
+{
+    double res = 0.0;
+    for (int i = 0; i < n; i++) {
+        res += fabs(a[i]);
+    }
+    return res;
+}
+
 double sum_l(const local double *a, int n)
 {
     double res = 0.0;
@@ -66,6 +76,31 @@ kernel void sumProd(global const double *a,
         int rem = N - m * sz;
         res_glob += sum_l(res_loc, m);
         res_glob += dot_product_g(a + m * sz, b + m * sz, rem);
+        *result = res_glob;
+    }
+}
+
+// computes using only single workgroup
+// optimize for bigger arrays
+kernel void sumMag(global const double *a,
+            global double *result,
+            int N)
+{
+    local double res_loc[BUFFSIZE];
+    int t = get_local_id(0);
+    if (get_group_id(0))
+        return;
+
+    int m = get_local_size(0);
+    int sz = N / m;
+    res_loc[t] = sum_abs(a + t * sz, sz);
+
+    barrier(CLK_LOCAL_MEM_FENCE);
+    double res_glob = 0;
+    if (t == 0) {
+        int rem = N - m * sz;
+        res_glob += sum_l(res_loc, m);
+        res_glob += sum_abs(a + m * sz, rem);
         *result = res_glob;
     }
 }

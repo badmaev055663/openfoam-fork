@@ -292,6 +292,26 @@ static double sumProdGPU
     return res;
 }
 
+static double sumMagGPU
+(
+    OpenCL& opencl,
+    cl::Kernel &kernel,
+    cl::Buffer &a_buf,
+    int n)
+{
+    double res;
+    cl::Buffer res_buf(opencl.context, CL_MEM_READ_WRITE, sizeof(double));
+    kernel.setArg(0, a_buf);
+    kernel.setArg(1, res_buf);
+    kernel.setArg(2, n);
+
+    opencl.queue.enqueueNDRangeKernel(kernel, cl::NullRange,
+                        cl::NDRange(n - n % locSz), cl::NDRange(locSz));
+    opencl.queue.finish();
+    opencl.queue.enqueueReadBuffer(res_buf, true, 0, sizeof(double), &res);
+    return res;
+}
+
 static void addMultGPU
 (
     OpenCL& opencl,
@@ -337,6 +357,7 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
     cl::Kernel sumProdKernel(opencl.program, "sumProd");
     cl::Kernel multAddKernel(opencl.program, "multAdd");
     cl::Kernel addMultKernel(opencl.program, "addMult");
+    cl::Kernel sumMagKernel(opencl.program, "sumMag");
 
     solveScalar* __restrict__ psiPtr = psi.begin();
 
@@ -478,8 +499,7 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
             addMultGPU(opencl, addMultKernel, wT_buf, rT_buf, rTPtr, -alpha, nCells);
       
             solverPerf.finalResidual() =
-                gSumMag(rA, matrix().mesh().comm())
-               /normFactor;
+                sumMagGPU(opencl, sumMagKernel, rA_buf, nCells) / normFactor;
         } while
         (
             (
