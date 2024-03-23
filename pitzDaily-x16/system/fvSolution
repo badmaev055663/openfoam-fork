@@ -18,8 +18,8 @@ solvers
 {
     T
     {
-        solver          PBiCGStab;
-        preconditioner  DILU;
+        solver          PBiCG;
+        preconditioner  none;
         tolerance       1e-6;
         relTol          0;
         norm            default;
