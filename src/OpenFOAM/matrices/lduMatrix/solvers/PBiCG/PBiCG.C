@@ -513,12 +513,12 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
             addMultGPU(opencl, addMultKernel, pA_buf, psi_buf, alpha, nCells);
             addMultGPU(opencl, addMultKernel, wA_buf, rA_buf, -alpha, nCells);
             addMultGPU(opencl, addMultKernel, wT_buf, rT_buf, -alpha, nCells);
+            opencl.queue.finish(); // fake reads
+            opencl.queue.enqueueReadBuffer(psi_buf, false, 0, sizeof(double), psiPtr);
+            opencl.queue.enqueueReadBuffer(rA_buf, false, 0, sizeof(double), rAPtr);
+            opencl.queue.enqueueReadBuffer(rT_buf, false, 0, sizeof(double), rTPtr);
             opencl.queue.finish();
-            opencl.queue.enqueueReadBuffer(psi_buf, false, 0, sizeof(double) * nCells, psiPtr);
-            opencl.queue.enqueueReadBuffer(rA_buf, false, 0, sizeof(double) * nCells, rAPtr);
-            opencl.queue.enqueueReadBuffer(rT_buf, false, 0, nCells, rTPtr); // fake read
-            opencl.queue.finish();
-      
+
             solverPerf.finalResidual() =
                 sumMagGPU(opencl, sumMagKernel, rA_buf, nCells) / normFactor;
         } while
@@ -529,6 +529,9 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
             )
          || solverPerf.nIterations() < minIter_
         );
+        opencl.queue.enqueueReadBuffer(psi_buf, false, 0, sizeof(double) * nCells, psiPtr);
+        opencl.queue.enqueueReadBuffer(rA_buf, false, 0, sizeof(double) * nCells, rAPtr);
+        opencl.queue.finish();
     }
 
     // Recommend PBiCGStab if PBiCG fails to converge
