@@ -453,8 +453,8 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
 
             // --- Precondition residuals
             copyGPU(opencl, copyKernel, wA_buf, rA_buf, nCells);
-            opencl.queue.finish();
-            opencl.queue.enqueueReadBuffer(wA_buf, false, 0, nCells * sizeof(double), wAPtr);
+            opencl.queue.finish(); // fake read
+            opencl.queue.enqueueReadBuffer(wA_buf, false, 0, sizeof(double), wAPtr);
 
             copyGPU(opencl, copyKernel, wT_buf, rT_buf, nCells);
             opencl.queue.finish(); // fake read
@@ -482,8 +482,8 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
                 multAddKernel.setArg(3, nCells);
                 opencl.queue.enqueueNDRangeKernel(multAddKernel, cl::NullRange,
                                             cl::NDRange(nCells - nCells % locSz), cl::NDRange(locSz));
-                opencl.queue.finish();
-                opencl.queue.enqueueReadBuffer(pA_buf, false, 0, nCells * sizeof(double), pAPtr);
+                opencl.queue.finish(); // fake read
+                opencl.queue.enqueueReadBuffer(pA_buf, false, 0, sizeof(double), pAPtr);
 
                 multAddKernel.setArg(0, pT_buf);
                 multAddKernel.setArg(1, wT_buf);
@@ -514,9 +514,10 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
             addMultGPU(opencl, addMultKernel, wA_buf, rA_buf, -alpha, nCells);
             addMultGPU(opencl, addMultKernel, wT_buf, rT_buf, -alpha, nCells);
             opencl.queue.finish();
-            opencl.queue.enqueueReadBuffer(psi_buf, true, 0, sizeof(double) * nCells, psiPtr);
-            opencl.queue.enqueueReadBuffer(rA_buf, true, 0, sizeof(double) * nCells, rAPtr);
-            opencl.queue.enqueueReadBuffer(rT_buf, true, 0, sizeof(double) * nCells, rTPtr);
+            opencl.queue.enqueueReadBuffer(psi_buf, false, 0, sizeof(double) * nCells, psiPtr);
+            opencl.queue.enqueueReadBuffer(rA_buf, false, 0, sizeof(double) * nCells, rAPtr);
+            opencl.queue.enqueueReadBuffer(rT_buf, false, 0, nCells, rTPtr); // fake read
+            opencl.queue.finish();
       
             solverPerf.finalResidual() =
                 sumMagGPU(opencl, sumMagKernel, rA_buf, nCells) / normFactor;
