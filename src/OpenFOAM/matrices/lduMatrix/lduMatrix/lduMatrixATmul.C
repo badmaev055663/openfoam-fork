@@ -31,7 +31,6 @@ Description
 \*---------------------------------------------------------------------------*/
 
 #include "lduMatrix.H"
-
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 void Foam::lduMatrix::Amul
@@ -140,7 +139,7 @@ void Foam::lduMatrix::AmulGPU
     lduKernel.setArg(6, nFaces);
     opencl.queue.enqueueNDRangeKernel(lduKernel, cl::NullRange,
                                 cl::NDRange(nFaces - nFaces % locSz), cl::NDRange(locSz));
-    opencl.queue.finish(); // fake read
+    // fake read
     opencl.queue.enqueueReadBuffer(Apsi_buf, false, 0, sizeof(double), ApsiPtr);
 }
 
@@ -247,7 +246,7 @@ void Foam::lduMatrix::TmulGPU
     lduKernel.setArg(6, nFaces);
     opencl.queue.enqueueNDRangeKernel(lduKernel, cl::NullRange,
                                 cl::NDRange(nFaces - nFaces % locSz), cl::NDRange(locSz));
-    opencl.queue.finish(); // fake read
+    // fake read
     opencl.queue.enqueueReadBuffer(Tpsi_buf, false, 0, sizeof(double), TpsiPtr);
 }
 

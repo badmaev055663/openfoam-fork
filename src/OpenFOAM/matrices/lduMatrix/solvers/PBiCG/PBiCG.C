@@ -28,7 +28,6 @@ License
 
 #include "PBiCG.H"
 #include "PrecisionAdaptor.H"
-
 // * * * * * * * * * * * * * * Static Data Members * * * * * * * * * * * * * //
 
 namespace Foam
@@ -453,25 +452,26 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
 
             // --- Precondition residuals
             copyGPU(opencl, copyKernel, wA_buf, rA_buf, nCells);
-            opencl.queue.finish(); // fake read
+            // fake read
             opencl.queue.enqueueReadBuffer(wA_buf, false, 0, sizeof(double), wAPtr);
 
             copyGPU(opencl, copyKernel, wT_buf, rT_buf, nCells);
-            opencl.queue.finish(); // fake read
+            // fake read
             opencl.queue.enqueueReadBuffer(wT_buf, false, 0, sizeof(double), wTPtr);
+            opencl.queue.finish();
 
             // --- Update search directions:
             wArT = sumProdGPU(opencl, sumProdKernel, wA_buf, rT_buf, nCells);
 
             if (solverPerf.nIterations() == 0)
             {
+                // fake reads
                 copyGPU(opencl, copyKernel, pA_buf, wA_buf, nCells);
-                opencl.queue.finish();
-                opencl.queue.enqueueReadBuffer(pA_buf, false, 0, nCells * sizeof(double), pAPtr);
+                opencl.queue.enqueueReadBuffer(pA_buf, false, 0, sizeof(double), pAPtr);
 
                 copyGPU(opencl, copyKernel, pT_buf, wT_buf, nCells);
-                opencl.queue.finish(); // fake read
                 opencl.queue.enqueueReadBuffer(pT_buf, false, 0, sizeof(double), pTPtr);
+                opencl.queue.finish();
             }
             else
             {
@@ -482,7 +482,7 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
                 multAddKernel.setArg(3, nCells);
                 opencl.queue.enqueueNDRangeKernel(multAddKernel, cl::NullRange,
                                             cl::NDRange(nCells - nCells % locSz), cl::NDRange(locSz));
-                opencl.queue.finish(); // fake read
+                // fake reads
                 opencl.queue.enqueueReadBuffer(pA_buf, false, 0, sizeof(double), pAPtr);
 
                 multAddKernel.setArg(0, pT_buf);
@@ -491,15 +491,14 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
                 multAddKernel.setArg(3, nCells);
                 opencl.queue.enqueueNDRangeKernel(multAddKernel, cl::NullRange,
                                             cl::NDRange(nCells - nCells % locSz), cl::NDRange(locSz));
-                opencl.queue.finish(); // fake read
                 opencl.queue.enqueueReadBuffer(pT_buf, false, 0, sizeof(double), pTPtr);
+                opencl.queue.finish();
             }
-
             // --- Update preconditioned residuals
             matrix_.AmulGPU(opencl, wA, wA_buf, pA_buf, diag_buf, lower_buf, upper_buf, l_buf, u_buf);
             matrix_.TmulGPU(opencl, wT, wT_buf, pT_buf, diag_buf, lower_buf, upper_buf, l_buf, u_buf);
 
-            const solveScalar wApT = sumProdGPU(opencl, sumProdKernel, wA_buf, pT_buf, nCells);          
+            const solveScalar wApT = sumProdGPU(opencl, sumProdKernel, wA_buf, pT_buf, nCells);
 
             // --- Test for singularity
             if (solverPerf.checkSingularity(mag(wApT)/normFactor))
@@ -513,7 +512,7 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
             addMultGPU(opencl, addMultKernel, pA_buf, psi_buf, alpha, nCells);
             addMultGPU(opencl, addMultKernel, wA_buf, rA_buf, -alpha, nCells);
             addMultGPU(opencl, addMultKernel, wT_buf, rT_buf, -alpha, nCells);
-            opencl.queue.finish(); // fake reads
+            // fake reads
             opencl.queue.enqueueReadBuffer(psi_buf, false, 0, sizeof(double), psiPtr);
             opencl.queue.enqueueReadBuffer(rA_buf, false, 0, sizeof(double), rAPtr);
             opencl.queue.enqueueReadBuffer(rT_buf, false, 0, sizeof(double), rTPtr);
