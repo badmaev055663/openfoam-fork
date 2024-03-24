@@ -2,7 +2,7 @@
 
 #pragma OPENCL EXTENSION cl_khr_int64_base_atomics: enable
 
-#define BUFFSIZE 2048
+#define BUFFSIZE 4096
 // hack from internet - it seems working
 double atomic_dadd(__global double *valq, double delta) {
     union {
