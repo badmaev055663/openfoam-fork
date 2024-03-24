@@ -531,6 +531,7 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
         );
         opencl.queue.enqueueReadBuffer(psi_buf, false, 0, sizeof(double) * nCells, psiPtr);
         opencl.queue.enqueueReadBuffer(rA_buf, false, 0, sizeof(double) * nCells, rAPtr);
+        opencl.queue.enqueueReadBuffer(wA_buf, false, 0, nCells * sizeof(double), wAPtr);
         opencl.queue.finish();
     }
 

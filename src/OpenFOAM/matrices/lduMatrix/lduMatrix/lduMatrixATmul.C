@@ -140,8 +140,8 @@ void Foam::lduMatrix::AmulGPU
     lduKernel.setArg(6, nFaces);
     opencl.queue.enqueueNDRangeKernel(lduKernel, cl::NullRange,
                                 cl::NDRange(nFaces - nFaces % locSz), cl::NDRange(locSz));
-    opencl.queue.finish();
-    opencl.queue.enqueueReadBuffer(Apsi_buf, false, 0, nCells * sizeof(double), ApsiPtr);
+    opencl.queue.finish(); // fake read
+    opencl.queue.enqueueReadBuffer(Apsi_buf, false, 0, sizeof(double), ApsiPtr);
 }
 
 void Foam::lduMatrix::Tmul
