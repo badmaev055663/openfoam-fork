@@ -251,7 +251,7 @@ Foam::solverPerformance Foam::PBiCG::solve
     return solverPerf;
 }
 
-static const int locSz = 128;
+static const int locSz = 256;
 
 static void copyGPU
 (

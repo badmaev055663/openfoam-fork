@@ -80,28 +80,31 @@ kernel void sumProd(global const double *a,
     }
 }
 
-// computes using only single workgroup
-// optimize for bigger arrays
+// better version than initial
 kernel void sumMag(global const double *a,
             global double *result,
             int N)
 {
-    local double res_loc[BUFFSIZE];
+    local double res_loc[1024];
+    const int m = get_local_size(0);
     int t = get_local_id(0);
-    if (get_group_id(0))
-        return;
+    int i = get_global_id(0);
+    if (i == 0)
+        *result = 0;
 
-    int m = get_local_size(0);
-    int sz = N / m;
-    res_loc[t] = sum_abs(a + t * sz, sz);
-
-    barrier(CLK_LOCAL_MEM_FENCE);
-    double res_glob = 0;
+    res_loc[t] = fabs(a[i]);
+    for (int stride = m / 2; stride > 0; stride /= 2) {
+        barrier(CLK_LOCAL_MEM_FENCE);
+        if (t < stride)
+            res_loc[t] += fabs(res_loc[t + stride]);
+    }
     if (t == 0) {
-        int rem = N - m * sz;
-        res_glob += sum_l(res_loc, m);
-        res_glob += sum_abs(a + m * sz, rem);
-        *result = res_glob;
+        atomic_dadd(result, res_loc[0]);
+    }
+    if (i == 1) {
+        const int n = get_global_size(0);
+        double delta = sum_abs(a + n,  N - n);
+        atomic_dadd(result, delta);
     }
 }
 
