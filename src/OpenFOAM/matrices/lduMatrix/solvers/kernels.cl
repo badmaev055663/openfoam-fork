@@ -2,7 +2,7 @@
 
 #pragma OPENCL EXTENSION cl_khr_int64_base_atomics: enable
 
-#define BUFFSIZE 4096
+#define BUFFSIZE 1024
 // hack from internet - it seems working
 double atomic_dadd(__global double *valq, double delta) {
     union {
@@ -45,15 +45,6 @@ double sum_abs(const global double *a,
     return res;
 }
 
-double sum_l(const local double *a, int n)
-{
-    double res = 0.0;
-    for (int i = 0; i < n; i++) {
-        res += a[i];
-    }
-    return res;
-}
-
 // computes using only single workgroup
 // optimize for bigger arrays
 kernel void sumProd(global const double *a,
@@ -61,22 +52,27 @@ kernel void sumProd(global const double *a,
             global double *result,
             int N)
 {
-    local double res_loc[BUFFSIZE];
+    local double loc_res[BUFFSIZE];
+    const int m = get_local_size(0);
     int t = get_local_id(0);
-    if (get_group_id(0))
-        return;
+    int i = get_global_id(0);
+    if (i == 0)
+        *result = 0;
 
-    int m = get_local_size(0);
-    int sz = N / m;
-    res_loc[t] = dot_product_g(a + t * sz, b + t * sz, sz);
-
-    barrier(CLK_LOCAL_MEM_FENCE);
-    double res_glob = 0;
+    loc_res[t] = a[i] * b[i];
+    for (int stride = m / 2; stride > 0; stride /= 2) {
+        barrier(CLK_LOCAL_MEM_FENCE);
+        if (t < stride) {
+            loc_res[t] += loc_res[t + stride];
+        }
+    }
     if (t == 0) {
-        int rem = N - m * sz;
-        res_glob += sum_l(res_loc, m);
-        res_glob += dot_product_g(a + m * sz, b + m * sz, rem);
-        *result = res_glob;
+        atomic_dadd(result, loc_res[0]);
+    }
+    if (i == 1) {
+        const int n = get_global_size(0);
+        double delta = dot_product_g(a + n, b + n, N - n);
+        atomic_dadd(result, delta);
     }
 }
 
@@ -85,7 +81,7 @@ kernel void sumMag(global const double *a,
             global double *result,
             int N)
 {
-    local double res_loc[1024];
+    local double res_loc[BUFFSIZE];
     const int m = get_local_size(0);
     int t = get_local_id(0);
     int i = get_global_id(0);
@@ -103,7 +99,7 @@ kernel void sumMag(global const double *a,
     }
     if (i == 1) {
         const int n = get_global_size(0);
-        double delta = sum_abs(a + n,  N - n);
+        double delta = sum_abs(a + n, N - n);
         atomic_dadd(result, delta);
     }
 }
