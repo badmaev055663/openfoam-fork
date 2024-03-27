@@ -7,7 +7,7 @@ cc         := gcc$(COMPILER_VERSION)
 
 cARCH      :=
 cDBUG      :=
-cOPT       := -O2
+cOPT       := -O2 -mavx2
 cWARN      := -Wall
 
 # Tuning

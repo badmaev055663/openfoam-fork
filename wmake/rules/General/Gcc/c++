@@ -10,7 +10,7 @@ CC         := g++$(COMPILER_VERSION) -std=c++14
 
 c++ARCH    :=
 c++DBUG    :=
-c++OPT     := -O2
+c++OPT     := -O2 -mavx2
 ptFLAGS    := -DNoRepository -ftemplate-depth-100
 
 c++WARN     = \
