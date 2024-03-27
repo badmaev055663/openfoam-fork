@@ -1,3 +1,0 @@
-simpleFoamGPU.C
-
-EXE = $(FOAM_APPBIN)/simpleFoamGPU
