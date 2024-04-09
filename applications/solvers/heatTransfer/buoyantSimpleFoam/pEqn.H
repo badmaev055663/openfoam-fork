@@ -33,7 +33,10 @@
 
         p_rghEqn.setReference(pRefCell, getRefCellValue(p_rgh, pRefCell));
 
-        p_rghEqn.solve();
+        if (useGPU)
+            p_rghEqn.solveGPU(opencl);
+        else
+            p_rghEqn.solve();
 
         if (simple.finalNonOrthogonalIter())
         {

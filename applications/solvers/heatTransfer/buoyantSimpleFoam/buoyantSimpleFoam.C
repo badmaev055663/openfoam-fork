@@ -41,7 +41,8 @@ Description
 #include "radiationModel.H"
 #include "simpleControl.H"
 #include "fvOptions.H"
-
+#include "omp.h"
+#include "gpu.H"
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 int main(int argc, char *argv[])
@@ -64,21 +65,77 @@ int main(int argc, char *argv[])
     #include "initContinuityErrs.H"
 
     turbulence->validate();
+    std::vector<cl::Platform> platforms;
+    cl::Platform::get(&platforms);
+    if (platforms.empty()) {
+        InfoErr << "Unable to find OpenCL platforms\n";
+        return 0;
+    }
+    int plat = 0;
+    const char *platEnv = std::getenv("FOAM_OCL_PLATFORM");
+    if (platEnv) {
+        plat = std::stoi(std::string(platEnv));
+        if (plat >= platforms.size() || plat < 0) {
+            InfoErr << "Invalid platfrom index: " << plat << endl;
+            return 0;
+        }
+    }
+    cl::Platform platform = platforms[plat];
+    Info << "Platform name: " << platform.getInfo<CL_PLATFORM_NAME>() << '\n';
+
+    cl_context_properties properties[] =
+    { CL_CONTEXT_PLATFORM, (cl_context_properties)platform(), 0};
+    cl::Context context(CL_DEVICE_TYPE_GPU, properties);
+
+    // get all devices associated with the context
+    std::vector<cl::Device> devices = context.getInfo<CL_CONTEXT_DEVICES>();
+    if (devices.size() == 0) {
+        InfoErr << "Zero devices for platform " << plat << endl;
+        return 0;
+    }
+    cl::Device device = devices[0];
+
+    std::string baseDir = std::getenv("WM_PROJECT_DIR");
+    std::ifstream srcFile(baseDir + "/src/OpenFOAM/matrices/lduMatrix/kernels.cl");
+    std::string kernelSrc((std::istreambuf_iterator<char>(srcFile)),
+                    std::istreambuf_iterator<char>());
+
+    cl::Program program(context, kernelSrc);
+    cl_int err = program.build(devices);
+    if (err != CL_SUCCESS) {
+        InfoErr << "OpenCL program build error: " << err << endl;
+        std::string msg = program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(device);
+        InfoErr << msg;
+        return 1;
+    }
+
+    cl::CommandQueue queue(context, device);
+    OpenCL opencl{platform, device, context, program, queue};
+    bool useGPU = false;
+    const char *gpuEnv = std::getenv("FOAM_USE_GPU");
+    if (gpuEnv) {
+        useGPU = std::stoi(std::string(gpuEnv));
+    }
 
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
     Info<< "\nStarting time loop\n" << endl;
+
+    double start = omp_get_wtime();
 
     while (simple.loop())
     {
         Info<< "Time = " << runTime.timeName() << nl << endl;
 
         // Pressure-velocity SIMPLE corrector
+        double t1 = omp_get_wtime();
         {
             #include "UEqn.H"
             #include "EEqn.H"
             #include "pEqn.H"
         }
+        double t2 = omp_get_wtime();
+        printf("solvers loop time: %lf ms\n", (t2 - t1) * 1000);
 
         turbulence->correct();
 
@@ -86,6 +143,8 @@ int main(int argc, char *argv[])
 
         runTime.printExecutionTime(Info);
     }
+    double end = omp_get_wtime();
+    printf("total solver time: %.4lf s\n", (end - start));
 
     Info<< "End\n" << endl;
 
