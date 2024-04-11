@@ -724,7 +724,6 @@ public:
             void AmulGPU
             (
                 OpenCL&,
-                solveScalarField&,
                 cl::Buffer&,
                 cl::Buffer&,
                 cl::Buffer&,
@@ -747,7 +746,6 @@ public:
             void TmulGPU
             (
                 OpenCL&,
-                solveScalarField&,
                 cl::Buffer&,
                 cl::Buffer&,
                 cl::Buffer&,

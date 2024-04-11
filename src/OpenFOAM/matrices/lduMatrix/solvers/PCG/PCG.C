@@ -355,7 +355,7 @@ Foam::solverPerformance Foam::PCG::scalarSolveGPU
             opencl.queue.finish();
 
             // --- Update preconditioned residual
-            matrix_.AmulGPU(opencl, wA, wA_buf, pA_buf, diag_buf, lower_buf, upper_buf, l_buf, u_buf);
+            matrix_.AmulGPU(opencl, wA_buf, pA_buf, diag_buf, lower_buf, upper_buf, l_buf, u_buf);
 
             solveScalar wApA = sumProdGPU(opencl, sumProdKernel, wA_buf, pA_buf, nCells);
 

@@ -418,8 +418,8 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
                 opencl.queue.finish();
             }
             // --- Update preconditioned residuals
-            matrix_.AmulGPU(opencl, wA, wA_buf, pA_buf, diag_buf, lower_buf, upper_buf, l_buf, u_buf);
-            matrix_.TmulGPU(opencl, wT, wT_buf, pT_buf, diag_buf, lower_buf, upper_buf, l_buf, u_buf);
+            matrix_.AmulGPU(opencl, wA_buf, pA_buf, diag_buf, lower_buf, upper_buf, l_buf, u_buf);
+            matrix_.TmulGPU(opencl, wT_buf, pT_buf, diag_buf, lower_buf, upper_buf, l_buf, u_buf);
 
             const solveScalar wApT = sumProdGPU(opencl, sumProdKernel, wA_buf, pT_buf, nCells);
 

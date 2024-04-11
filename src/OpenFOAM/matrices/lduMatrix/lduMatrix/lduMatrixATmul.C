@@ -102,7 +102,6 @@ void Foam::lduMatrix::Amul
 void Foam::lduMatrix::AmulGPU
 (
     OpenCL& opencl,
-    solveScalarField& Apsi,
     cl::Buffer& Apsi_buf,
     cl::Buffer& psi_buf,
     cl::Buffer& diag_buf,
@@ -112,7 +111,6 @@ void Foam::lduMatrix::AmulGPU
     cl::Buffer& u_buf
 ) const
 {
-    solveScalar* __restrict__ ApsiPtr = Apsi.begin();
     cl::Kernel multKernel(opencl.program, "mult");
     cl::Kernel lduKernel(opencl.program, "lduMul");
 
@@ -125,8 +123,7 @@ void Foam::lduMatrix::AmulGPU
     multKernel.setArg(3, nCells);
     opencl.queue.enqueueNDRangeKernel(multKernel, cl::NullRange,
                                 cl::NDRange(nCells - nCells % locSz), cl::NDRange(locSz));
-    opencl.queue.finish(); // fake read
-    opencl.queue.enqueueReadBuffer(Apsi_buf, false, 0, sizeof(double), ApsiPtr);
+    opencl.queue.finish();
 
     const label nFaces = upper().size();
 
@@ -207,7 +204,6 @@ void Foam::lduMatrix::Tmul
 void Foam::lduMatrix::TmulGPU
 (
     OpenCL& opencl,
-    solveScalarField& Tpsi,
     cl::Buffer& Tpsi_buf,
     cl::Buffer& psi_buf,
     cl::Buffer& diag_buf,
@@ -217,7 +213,6 @@ void Foam::lduMatrix::TmulGPU
     cl::Buffer& u_buf
 ) const
 {
-    solveScalar* __restrict__ TpsiPtr = Tpsi.begin();
     cl::Kernel multKernel(opencl.program, "mult");
     cl::Kernel lduKernel(opencl.program, "lduMul");
 
@@ -230,8 +225,7 @@ void Foam::lduMatrix::TmulGPU
     multKernel.setArg(3, nCells);
     opencl.queue.enqueueNDRangeKernel(multKernel, cl::NullRange,
                                 cl::NDRange(nCells - nCells % locSz), cl::NDRange(locSz));
-    opencl.queue.finish(); // fake read
-    opencl.queue.enqueueReadBuffer(Tpsi_buf, false, 0, sizeof(double), TpsiPtr);
+    opencl.queue.finish();
 
     const label nFaces = upper().size();
 
