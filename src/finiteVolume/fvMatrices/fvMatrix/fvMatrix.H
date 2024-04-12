@@ -815,6 +815,9 @@ SolverPerformance<Type> solve(fvMatrix<Type>&);
 template<class Type>
 SolverPerformance<Type> solve(const tmp<fvMatrix<Type>>&);
 
+template<class Type>
+SolverPerformance<Type> solveGPU(const tmp<fvMatrix<Type>>&, OpenCL&);
+
 
 //- Return the correction form of the given matrix
 //- by subtracting the matrix multiplied by the current field

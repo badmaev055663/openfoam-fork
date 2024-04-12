@@ -296,6 +296,145 @@ Foam::SolverPerformance<Type> Foam::fvMatrix<Type>::solveSegregated
     return solverPerfVec;
 }
 
+template<class Type>
+Foam::SolverPerformance<Type> Foam::fvMatrix<Type>::solveSegregatedGPU
+(
+    const dictionary& solverControls,
+    OpenCL& opencl
+)
+{
+    if (useImplicit_)
+    {
+        FatalErrorInFunction
+            << "Implicit option is not allowed for type: " << Type::typeName
+            << exit(FatalError);
+    }
+
+    if (debug)
+    {
+        Info.masterStream(this->mesh().comm())
+            << "fvMatrix<Type>::solveSegregated"
+               "(const dictionary& solverControls) : "
+               "solving fvMatrix<Type>"
+            << endl;
+    }
+
+    const int logLevel =
+        solverControls.getOrDefault<int>
+        (
+            "log",
+            SolverPerformance<Type>::debug
+        );
+
+    auto& psi =
+        const_cast<GeometricField<Type, fvPatchField, volMesh>&>(psi_);
+
+    SolverPerformance<Type> solverPerfVec
+    (
+        "fvMatrix<Type>::solveSegregated",
+        psi.name()
+    );
+
+    scalarField saveDiag(diag());
+
+    Field<Type> source(source_);
+
+    // At this point include the boundary source from the coupled boundaries.
+    // This is corrected for the implicit part by updateMatrixInterfaces within
+    // the component loop.
+    addBoundarySource(source);
+
+    typename Type::labelType validComponents
+    (
+        psi.mesh().template validComponents<Type>()
+    );
+
+    for (direction cmpt=0; cmpt<Type::nComponents; cmpt++)
+    {
+        if (validComponents[cmpt] == -1) continue;
+
+        // copy field and source
+
+        scalarField psiCmpt(psi.primitiveField().component(cmpt));
+        addBoundaryDiag(diag(), cmpt);
+
+        scalarField sourceCmpt(source.component(cmpt));
+
+        FieldField<Field, scalar> bouCoeffsCmpt
+        (
+            boundaryCoeffs_.component(cmpt)
+        );
+
+        FieldField<Field, scalar> intCoeffsCmpt
+        (
+            internalCoeffs_.component(cmpt)
+        );
+
+        lduInterfaceFieldPtrsList interfaces =
+            psi.boundaryField().scalarInterfaces();
+
+        // Use the initMatrixInterfaces and updateMatrixInterfaces to correct
+        // bouCoeffsCmpt for the explicit part of the coupled boundary
+        // conditions
+        {
+            PrecisionAdaptor<solveScalar, scalar> sourceCmpt_ss(sourceCmpt);
+            ConstPrecisionAdaptor<solveScalar, scalar> psiCmpt_ss(psiCmpt);
+
+            const label startRequest = UPstream::nRequests();
+
+            initMatrixInterfaces
+            (
+                true,
+                bouCoeffsCmpt,
+                interfaces,
+                psiCmpt_ss(),
+                sourceCmpt_ss.ref(),
+                cmpt
+            );
+
+            updateMatrixInterfaces
+            (
+                true,
+                bouCoeffsCmpt,
+                interfaces,
+                psiCmpt_ss(),
+                sourceCmpt_ss.ref(),
+                cmpt,
+                startRequest
+            );
+        }
+
+        solverPerformance solverPerf;
+
+        // Solver call
+        solverPerf = lduMatrix::solver::New
+        (
+            psi.name() + pTraits<Type>::componentNames[cmpt],
+            *this,
+            bouCoeffsCmpt,
+            intCoeffsCmpt,
+            interfaces,
+            solverControls
+        )->solveGPU(psiCmpt, sourceCmpt, opencl, cmpt);
+
+        if (logLevel)
+        {
+            solverPerf.print(Info.masterStream(this->mesh().comm()));
+        }
+
+        solverPerfVec.replace(cmpt, solverPerf);
+        solverPerfVec.solverName() = solverPerf.solverName();
+
+        psi.primitiveFieldRef().replace(cmpt, psiCmpt);
+        diag() = saveDiag;
+    }
+
+    psi.correctBoundaryConditions();
+
+    psi.mesh().data().setSolverPerformance(psi.name(), solverPerfVec);
+
+    return solverPerfVec;
+}
 
 template<class Type>
 Foam::SolverPerformance<Type> Foam::fvMatrix<Type>::solveCoupled

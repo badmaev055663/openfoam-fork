@@ -18,18 +18,34 @@
 
     if (simple.momentumPredictor())
     {
-        solve
-        (
-            UEqn
-         ==
-            fvc::reconstruct
+        if (useGPU) {
+            solveGPU
             (
+                UEqn
+            ==
+                fvc::reconstruct
                 (
-                  - ghf*fvc::snGrad(rho)
-                  - fvc::snGrad(p_rgh)
-                )*mesh.magSf()
-            )
-        );
+                    (
+                    - ghf*fvc::snGrad(rho)
+                    - fvc::snGrad(p_rgh)
+                    )*mesh.magSf()
+                ),
+                opencl
+            );
+        } else {
+            solve
+            (
+                UEqn
+            ==
+                fvc::reconstruct
+                (
+                    (
+                    - ghf*fvc::snGrad(rho)
+                    - fvc::snGrad(p_rgh)
+                    )*mesh.magSf()
+                )
+            );
+        }
 
         fvOptions.correct(U);
     }

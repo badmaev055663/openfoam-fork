@@ -420,6 +420,13 @@ public:
                     const dictionary&
                 ) const;
 
+                virtual SolverPerformance<vector> solveGPU
+                (
+                    fvMatrix<vector>&,
+                    OpenCL& opencl,
+                    const dictionary&
+                ) const;
+
                 //- Solve returning the solution statistics given convergence
                 //- tolerance. Use the given solver controls
                 virtual SolverPerformance<sphericalTensor> solve

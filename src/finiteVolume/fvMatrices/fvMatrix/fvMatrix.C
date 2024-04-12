@@ -1991,6 +1991,16 @@ Foam::SolverPerformance<Type> Foam::solve(const tmp<fvMatrix<Type>>& tmat)
     return solverPerf;
 }
 
+template<class Type>
+Foam::SolverPerformance<Type> Foam::solveGPU(const tmp<fvMatrix<Type>>& tmat, OpenCL& opencl)
+{
+    SolverPerformance<Type> solverPerf(tmat.constCast().solveGPU(opencl));
+
+    tmat.clear();
+
+    return solverPerf;
+}
+
 
 template<class Type>
 Foam::tmp<Foam::fvMatrix<Type>> Foam::correction

@@ -642,6 +642,17 @@ Foam::SolverPerformance<Foam::vector> Foam::fvMesh::solve
     return m.solveSegregatedOrCoupled(dict);
 }
 
+Foam::SolverPerformance<Foam::vector> Foam::fvMesh::solveGPU
+(
+    fvMatrix<vector>& m,
+    OpenCL& opencl,
+    const dictionary& dict
+) const
+{
+    // Redirect to fvMatrix solver
+    return m.solveSegregatedOrCoupledGPU(dict, opencl);
+}
+
 
 Foam::SolverPerformance<Foam::sphericalTensor> Foam::fvMesh::solve
 (
