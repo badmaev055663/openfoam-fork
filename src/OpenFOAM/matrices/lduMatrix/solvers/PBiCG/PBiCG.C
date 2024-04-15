@@ -366,8 +366,7 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
         cl::Buffer l_buf(opencl.queue, lPtr, lPtr + nFaces, true);
         cl::Buffer u_buf(opencl.queue, uPtr, uPtr + nFaces, true);
 
-        scalar* __restrict__ DPtr = const_cast<scalar*>(matrix_.diag().begin());
-        cl::Buffer rD_buf(opencl.queue, DPtr, DPtr + nCells, false);
+        cl::Buffer rD_buf(opencl.queue, diagPtr, diagPtr + nCells, false);
         bool usePrecond = true;
         if (usePrecond) { // init diagonal precondition
             invKernel.setArg(0, rD_buf);
