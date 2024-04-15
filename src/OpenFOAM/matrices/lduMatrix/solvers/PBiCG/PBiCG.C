@@ -309,11 +309,11 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
     {
         Info<< "   Normalisation factor = " << normFactor << endl;
     }
+    cl::Buffer rA_buf(opencl.queue, rAPtr, rAPtr + nCells, false);
 
     // --- Calculate normalised residual norm
     solverPerf.initialResidual() =
-        gSumMag(rA, matrix().mesh().comm())
-       /normFactor;
+        sumMagGPU(opencl, sumMagKernel, rA_buf, nCells) /normFactor;
     solverPerf.finalResidual() = solverPerf.initialResidual();
 
     // --- Check convergence, solve if not converged
@@ -345,7 +345,6 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
         cl::Buffer pT_buf(opencl.queue, pTPtr, pTPtr + nCells, false);
         cl::Buffer psi_buf(opencl.queue, psiPtr, psiPtr + nCells, false);
 
-        cl::Buffer rA_buf(opencl.queue, rAPtr, rAPtr + nCells, false);
         cl::Buffer rT_buf(opencl.queue, rTPtr, rTPtr + nCells, false);
 
         scalar* const __restrict__ diagPtr = const_cast<scalar*>(matrix_.diag().begin());
