@@ -372,8 +372,8 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
             invKernel.setArg(1, nCells);
             opencl.queue.enqueueNDRangeKernel(invKernel, cl::NullRange,
                         cl::NDRange(nCells - nCells % locSz), cl::NDRange(locSz));
-            opencl.queue.finish();
         }
+        opencl.queue.finish();
         // --- Solver iteration
         do
         {
