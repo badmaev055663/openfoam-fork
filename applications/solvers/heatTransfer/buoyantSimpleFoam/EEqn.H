@@ -20,9 +20,9 @@
 
     fvOptions.constrain(EEqn);
 
-    if (useGPU)
-        EEqn.solveGPU(opencl);
-    else
+    //if (useGPU)
+        //EEqn.solveGPU(opencl);
+    //else
         EEqn.solve();
 
     fvOptions.correct(he);

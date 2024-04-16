@@ -18,7 +18,7 @@
 
     if (simple.momentumPredictor())
     {
-        if (useGPU) {
+        /*if (useGPU) {
             solveGPU
             (
                 UEqn
@@ -32,7 +32,7 @@
                 ),
                 opencl
             );
-        } else {
+        } else {*/
             solve
             (
                 UEqn
@@ -45,7 +45,7 @@
                     )*mesh.magSf()
                 )
             );
-        }
+        //}
 
         fvOptions.correct(U);
     }
