@@ -28,5 +28,8 @@
     fvOptions.correct(he);
 
     thermo.correct();
-    radiation->correct();
+    if (useGPU)
+      radiation->correctGPU(opencl);
+    else
+      radiation->correct();
 }

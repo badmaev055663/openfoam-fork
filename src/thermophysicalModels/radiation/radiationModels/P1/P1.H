@@ -116,6 +116,7 @@ public:
 
             //- Solve radiation equation(s)
             void calculate();
+            void calculateGPU(OpenCL&);
 
             //- Read radiation properties dictionary
             bool read();

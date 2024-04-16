@@ -243,6 +243,25 @@ void Foam::radiation::radiationModel::correct()
     }
 }
 
+void Foam::radiation::radiationModel::correctGPU(OpenCL& opencl)
+{
+    if (!radiation_)
+    {
+        return;
+    }
+
+    if (firstIter_ || (time_.timeIndex() % solverFreq_ == 0))
+    {
+        calculateGPU(opencl);
+        firstIter_ = false;
+    }
+
+    if (soot_)
+    {
+        soot_->correct();
+    }
+}
+
 
 Foam::tmp<Foam::fvScalarMatrix> Foam::radiation::radiationModel::Sh
 (

@@ -251,6 +251,53 @@ void Foam::radiation::P1::calculate()
     }
 }
 
+void Foam::radiation::P1::calculateGPU(OpenCL& opencl)
+{
+    a_ = absorptionEmission_->a();
+    e_ = absorptionEmission_->e();
+    E_ = absorptionEmission_->E();
+    const volScalarField sigmaEff(scatter_->sigmaEff());
+
+    const dimensionedScalar a0("a0", a_.dimensions(), ROOTVSMALL);
+
+    // Construct diffusion
+    const volScalarField gamma
+    (
+        IOobject
+        (
+            "gammaRad",
+            G_.mesh().time().timeName(),
+            G_.mesh(),
+            IOobject::NO_READ,
+            IOobject::NO_WRITE
+        ),
+        1.0/(3.0*a_ + sigmaEff + a0)
+    );
+
+    // Solve G transport equation
+    solveGPU
+    (
+        fvm::laplacian(gamma, G_)
+      - fvm::Sp(a_, G_)
+     ==
+      - 4.0*(e_*physicoChemical::sigma*pow4(T_)) - E_,
+      opencl
+    );
+
+    // Calculate radiative heat flux on boundaries.
+    volScalarField::Boundary& qrBf = qr_.boundaryFieldRef();
+    const volScalarField::Boundary& GBf = G_.boundaryField();
+    const volScalarField::Boundary& gammaBf = gamma.boundaryField();
+
+    forAll(mesh_.boundaryMesh(), patchi)
+    {
+        if (!GBf[patchi].coupled())
+        {
+            qrBf[patchi] = -gammaBf[patchi]*GBf[patchi].snGrad();
+        }
+    }
+}
+
 
 Foam::tmp<Foam::volScalarField> Foam::radiation::P1::Rp() const
 {

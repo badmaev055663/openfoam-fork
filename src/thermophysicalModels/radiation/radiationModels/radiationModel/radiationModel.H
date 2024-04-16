@@ -224,9 +224,11 @@ public:
 
             //- Main update/correction routine
             virtual void correct();
+            virtual void correctGPU(OpenCL&);
 
             //- Solve radiation equation(s)
             virtual void calculate() = 0;
+            virtual void calculateGPU(OpenCL&) {}
 
             //- Read radiationProperties dictionary
             virtual bool read() = 0;
