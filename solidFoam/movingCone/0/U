@@ -9,40 +9,54 @@ FoamFile
 {
     version     2.0;
     format      ascii;
-    class       dictionary;
-    object      controlDict;
+    class       volVectorField;
+    object      U;
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-application     scalarTransportFoam;
+dimensions      [0 1 -1 0 0 0 0];
 
-startFrom       startTime;
+internalField   uniform (0 0 0);
 
-startTime       0;
+boundaryField
+{
+    movingWall
+    {
+        type            movingWallVelocity;
+        value           $internalField;
+    }
 
-stopAt          endTime;
+    farFieldMoving
+    {
+        type            noSlip;
+    }
 
-endTime         0.001;
+    fixedWall
+    {
+        type            noSlip;
+    }
 
-deltaT          0.00001;
+    left
+    {
+        type            pressureInletOutletVelocity;
+        value           $internalField;
+    }
 
-writeControl    timeStep;
+    farField
+    {
+        type            noSlip;
+    }
 
-writeInterval   10;
+    back
+    {
+        type            wedge;
+    }
 
-purgeWrite      0;
-
-writeFormat     ascii;
-
-writePrecision  6;
-
-writeCompression off;
-
-timeFormat      general;
-
-timePrecision   6;
-
-runTimeModifiable true;
+    front
+    {
+        type            wedge;
+    }
+}
 
 
 // ************************************************************************* //

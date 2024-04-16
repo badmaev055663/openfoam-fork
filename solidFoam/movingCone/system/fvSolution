@@ -10,39 +10,52 @@ FoamFile
     version     2.0;
     format      ascii;
     class       dictionary;
-    object      controlDict;
+    object      fvSolution;
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-application     scalarTransportFoam;
+solvers
+{
+    h
+    {
+        solver          PCG;
+        preconditioner  diagonal;
+        tolerance       1e-05;
+        relTol          0.1;
+    }
 
-startFrom       startTime;
+    hFinal
+    {
+        $h;
+        tolerance       1e-05;
+        relTol          0;
+    }
 
-startTime       0;
+    cellMotionUx
+    {
+        solver          PCG;
+        preconditioner  diagonal;
+        tolerance       1e-08;
+        relTol          0;
+    }
+}
 
-stopAt          endTime;
+PIMPLE
+{
+    correctPhi          yes;
+    nOuterCorrectors    2;
+    nCorrectors         1;
+    nNonOrthogonalCorrectors 0;
+    meshFluxCorrection  true;
+}
 
-endTime         0.001;
-
-deltaT          0.00001;
-
-writeControl    timeStep;
-
-writeInterval   10;
-
-purgeWrite      0;
-
-writeFormat     ascii;
-
-writePrecision  6;
-
-writeCompression off;
-
-timeFormat      general;
-
-timePrecision   6;
-
-runTimeModifiable true;
+relaxationFactors
+{
+    equations
+    {
+        "h.*"           1;
+    }
+}
 
 
 // ************************************************************************* //

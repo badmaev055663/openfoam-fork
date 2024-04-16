@@ -24,8 +24,13 @@
     hEqn.relax();
 
     fvOptions.constrain(hEqn);
-
-    hEqn.solve();   //mesh.solver(h.select(finalIter)));
+    double t1 = omp_get_wtime();
+    if (useGPU)
+        hEqn.solveGPU(opencl);
+    else
+        hEqn.solve();   //mesh.solver(h.select(finalIter)));
+    double t2 = omp_get_wtime();
+    printf("solver loop time: %lf ms\n", (t2 - t1) * 1000);
 
     fvOptions.correct(h);
 

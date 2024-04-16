@@ -106,11 +106,27 @@ public:
             const direction cmpt=0
         ) const;
 
+        virtual solverPerformance scalarSolveGPU
+        (
+            scalarField& psi,
+            const scalarField& source,
+            OpenCL& opencl,
+            const direction cmpt=0
+        ) const;
+
         //- Solve the matrix with this solver
         virtual solverPerformance solve
         (
             scalarField& psi,
             const scalarField& source,
+            const direction cmpt=0
+        ) const;
+
+        virtual solverPerformance solveGPU
+        (
+            scalarField& psi,
+            const scalarField& source,
+            OpenCL& opencl,
             const direction cmpt=0
         ) const;
 };

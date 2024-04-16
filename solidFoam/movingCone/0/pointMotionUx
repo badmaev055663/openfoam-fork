@@ -9,40 +9,55 @@ FoamFile
 {
     version     2.0;
     format      ascii;
-    class       dictionary;
-    object      controlDict;
+    class       pointScalarField;
+    object      pointMotionUx;
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-application     scalarTransportFoam;
+dimensions      [0 1 -1 0 0 0 0];
 
-startFrom       startTime;
+internalField   uniform 0;
 
-startTime       0;
+boundaryField
+{
+    movingWall
+    {
+        type            uniformFixedValue;
+        uniformValue    constant 1;
+    }
 
-stopAt          endTime;
+    farFieldMoving
+    {
+        type            slip;
+    }
 
-endTime         0.001;
+    fixedWall
+    {
+        type            uniformFixedValue;
+        uniformValue    constant 0;
+    }
 
-deltaT          0.00001;
+    left
+    {
+        type            uniformFixedValue;
+        uniformValue    constant 0;
+    }
 
-writeControl    timeStep;
+    farField
+    {
+        type            slip;
+    }
 
-writeInterval   10;
+    back
+    {
+        type            wedge;
+    }
 
-purgeWrite      0;
-
-writeFormat     ascii;
-
-writePrecision  6;
-
-writeCompression off;
-
-timeFormat      general;
-
-timePrecision   6;
-
-runTimeModifiable true;
+    front
+    {
+        type            wedge;
+    }
+}
 
 
 // ************************************************************************* //

@@ -251,101 +251,6 @@ Foam::solverPerformance Foam::PBiCG::solve
     return solverPerf;
 }
 
-static const int locSz = 256;
-
-static void copyGPU
-(
-    OpenCL& opencl,
-    cl::Kernel &kernel,
-    cl::Buffer &dst,
-    cl::Buffer &src,
-    int n)
-{
-    kernel.setArg(0, dst);
-    kernel.setArg(1, src);
-    kernel.setArg(2, n);
-    opencl.queue.enqueueNDRangeKernel(kernel, cl::NullRange,
-                cl::NDRange(n - n % locSz), cl::NDRange(locSz));
-
-}
-
-static double sumProdGPU
-(
-    OpenCL& opencl,
-    cl::Kernel &kernel,
-    cl::Buffer &a_buf,
-    cl::Buffer &b_buf,
-    int n)
-{
-    double res;
-    cl::Buffer res_buf(opencl.context, CL_MEM_READ_WRITE, sizeof(double));
-    kernel.setArg(0, a_buf);
-    kernel.setArg(1, b_buf);
-    kernel.setArg(2, res_buf);
-    kernel.setArg(3, n);
-
-    opencl.queue.enqueueNDRangeKernel(kernel, cl::NullRange,
-                        cl::NDRange(n - n % locSz), cl::NDRange(locSz));
-    opencl.queue.finish();
-    opencl.queue.enqueueReadBuffer(res_buf, true, 0, sizeof(double), &res);
-    return res;
-}
-
-static double sumMagGPU
-(
-    OpenCL& opencl,
-    cl::Kernel &kernel,
-    cl::Buffer &a_buf,
-    int n)
-{
-    double res;
-    cl::Buffer res_buf(opencl.context, CL_MEM_READ_WRITE, sizeof(double));
-    kernel.setArg(0, a_buf);
-    kernel.setArg(1, res_buf);
-    kernel.setArg(2, n);
-
-    opencl.queue.enqueueNDRangeKernel(kernel, cl::NullRange,
-                        cl::NDRange(n - n % locSz), cl::NDRange(locSz));
-    opencl.queue.finish();
-    opencl.queue.enqueueReadBuffer(res_buf, true, 0, sizeof(double), &res);
-    return res;
-}
-
-static void addMultGPU
-(
-    OpenCL& opencl,
-    cl::Kernel &kernel,
-    cl::Buffer &a_buf,
-    cl::Buffer &b_buf,
-    double k,
-    int n)
-{
-    kernel.setArg(0, a_buf);
-    kernel.setArg(1, b_buf);
-    kernel.setArg(2, k);
-    kernel.setArg(3, n);
-
-    opencl.queue.enqueueNDRangeKernel(kernel, cl::NullRange,
-                        cl::NDRange(n - n % locSz), cl::NDRange(locSz));
-}
-
-static void diagPrecondGPU
-(
-    OpenCL& opencl,
-    cl::Kernel &kernel,
-    cl::Buffer &wA_buf,
-    cl::Buffer &rA_buf,
-    cl::Buffer &rD_buf,
-    int n)
-{
-    kernel.setArg(0, rA_buf);
-    kernel.setArg(1, rD_buf);
-    kernel.setArg(2, wA_buf);
-    kernel.setArg(3, n);
-    opencl.queue.enqueueNDRangeKernel(kernel, cl::NullRange,
-                        cl::NDRange(n - n % locSz), cl::NDRange(locSz));
-}
-
 Foam::solverPerformance Foam::PBiCG::solveGPU
 (
     scalarField& psi_s,
@@ -478,16 +383,10 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
             const solveScalar wArTold = wArT;
             if (usePrecond) { // diagonal precondition
                 diagPrecondGPU(opencl, multKernel, wA_buf, rA_buf, rD_buf, nCells);
-                opencl.queue.enqueueReadBuffer(wA_buf, false, 0, sizeof(double), wAPtr);
-
                 diagPrecondGPU(opencl, multKernel, wT_buf, rT_buf, rD_buf, nCells);
-                opencl.queue.enqueueReadBuffer(wT_buf, false, 0, sizeof(double), wTPtr);
             } else { // none precondition
                 copyGPU(opencl, copyKernel, wA_buf, rA_buf, nCells);
-                opencl.queue.enqueueReadBuffer(wA_buf, false, 0, sizeof(double), wAPtr);
-
                 copyGPU(opencl, copyKernel, wT_buf, rT_buf, nCells);
-                opencl.queue.enqueueReadBuffer(wT_buf, false, 0, sizeof(double), wTPtr);
             }
             opencl.queue.finish();
 
@@ -496,12 +395,8 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
 
             if (solverPerf.nIterations() == 0)
             {
-                // fake reads
                 copyGPU(opencl, copyKernel, pA_buf, wA_buf, nCells);
-                opencl.queue.enqueueReadBuffer(pA_buf, false, 0, sizeof(double), pAPtr);
-
                 copyGPU(opencl, copyKernel, pT_buf, wT_buf, nCells);
-                opencl.queue.enqueueReadBuffer(pT_buf, false, 0, sizeof(double), pTPtr);
                 opencl.queue.finish();
             }
             else
@@ -513,8 +408,6 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
                 multAddKernel.setArg(3, nCells);
                 opencl.queue.enqueueNDRangeKernel(multAddKernel, cl::NullRange,
                                             cl::NDRange(nCells - nCells % locSz), cl::NDRange(locSz));
-                // fake reads
-                opencl.queue.enqueueReadBuffer(pA_buf, false, 0, sizeof(double), pAPtr);
 
                 multAddKernel.setArg(0, pT_buf);
                 multAddKernel.setArg(1, wT_buf);
@@ -522,7 +415,6 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
                 multAddKernel.setArg(3, nCells);
                 opencl.queue.enqueueNDRangeKernel(multAddKernel, cl::NullRange,
                                             cl::NDRange(nCells - nCells % locSz), cl::NDRange(locSz));
-                opencl.queue.enqueueReadBuffer(pT_buf, false, 0, sizeof(double), pTPtr);
                 opencl.queue.finish();
             }
             // --- Update preconditioned residuals
@@ -543,10 +435,6 @@ Foam::solverPerformance Foam::PBiCG::solveGPU
             addMultGPU(opencl, addMultKernel, pA_buf, psi_buf, alpha, nCells);
             addMultGPU(opencl, addMultKernel, wA_buf, rA_buf, -alpha, nCells);
             addMultGPU(opencl, addMultKernel, wT_buf, rT_buf, -alpha, nCells);
-            // fake reads
-            opencl.queue.enqueueReadBuffer(psi_buf, false, 0, sizeof(double), psiPtr);
-            opencl.queue.enqueueReadBuffer(rA_buf, false, 0, sizeof(double), rAPtr);
-            opencl.queue.enqueueReadBuffer(rT_buf, false, 0, sizeof(double), rTPtr);
             opencl.queue.finish();
 
             solverPerf.finalResidual() =

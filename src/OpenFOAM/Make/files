@@ -436,6 +436,7 @@ $(lduMatrix)/lduMatrix/lduMatrixUpdateMatrixInterfaces.C
 $(lduMatrix)/lduMatrix/lduMatrixSolver.C
 $(lduMatrix)/lduMatrix/lduMatrixSmoother.C
 $(lduMatrix)/lduMatrix/lduMatrixPreconditioner.C
+$(lduMatrix)/gpuCommon.C
 
 $(lduMatrix)/solvers/diagonalSolver/diagonalSolver.C
 $(lduMatrix)/solvers/smoothSolver/smoothSolver.C

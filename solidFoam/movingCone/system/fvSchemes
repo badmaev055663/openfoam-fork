@@ -10,39 +10,45 @@ FoamFile
     version     2.0;
     format      ascii;
     class       dictionary;
-    object      controlDict;
+    object      fvSchemes;
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-application     scalarTransportFoam;
+ddtSchemes
+{
+    default         Euler;
+}
 
-startFrom       startTime;
+gradSchemes
+{
+    default         Gauss linear;
+}
 
-startTime       0;
+divSchemes
+{
+    default         none;
 
-stopAt          endTime;
+    div(phi,U)      Gauss linear;
 
-endTime         0.001;
+    div((nuEff*dev2(T(grad(U))))) Gauss linear;
+}
 
-deltaT          0.00001;
+laplacianSchemes
+{
+    default         Gauss linear corrected;
 
-writeControl    timeStep;
+    laplacian(diffusivity,cellMotionU) Gauss linear uncorrected;
+}
 
-writeInterval   10;
+interpolationSchemes
+{
+    default         linear;
+}
 
-purgeWrite      0;
-
-writeFormat     ascii;
-
-writePrecision  6;
-
-writeCompression off;
-
-timeFormat      general;
-
-timePrecision   6;
-
-runTimeModifiable true;
+snGradSchemes
+{
+    default         corrected;
+}
 
 
 // ************************************************************************* //

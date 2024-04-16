@@ -10,39 +10,18 @@ FoamFile
     version     2.0;
     format      ascii;
     class       dictionary;
-    object      controlDict;
+    object      dynamicMeshDict;
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-application     scalarTransportFoam;
+dynamicFvMesh   dynamicMotionSolverFvMesh;
 
-startFrom       startTime;
+motionSolverLibs (fvMotionSolvers);
 
-startTime       0;
+motionSolver    velocityComponentLaplacian;
 
-stopAt          endTime;
-
-endTime         0.001;
-
-deltaT          0.00001;
-
-writeControl    timeStep;
-
-writeInterval   10;
-
-purgeWrite      0;
-
-writeFormat     ascii;
-
-writePrecision  6;
-
-writeCompression off;
-
-timeFormat      general;
-
-timePrecision   6;
-
-runTimeModifiable true;
+component       x;
+diffusivity     directional (1 200 0);
 
 
 // ************************************************************************* //
