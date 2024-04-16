@@ -53,6 +53,7 @@ Description
 #include "coordinateSystem.H"
 #include "loopControl.H"
 #include "pressureControl.H"
+#include "omp.h"
 
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
@@ -119,7 +120,6 @@ int main(int argc, char *argv[])
                 #include "setRegionFluidFields.H"
                 #include "solveFluid.H"
             }
-
             forAll(solidRegions, i)
             {
                 fvMesh& mesh = solidRegions[i];

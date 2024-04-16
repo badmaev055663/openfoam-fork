@@ -64,6 +64,7 @@ SourceFiles
 #include "InfoProxy.H"
 #include "Enum.H"
 #include "profilingTrigger.H"
+#include "gpu.H"
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
@@ -296,6 +297,14 @@ public:
                 const scalarField& source,
                 const direction cmpt=0
             ) const = 0;
+
+            virtual solverPerformance solveGPU
+            (
+                scalarField& psi,
+                const scalarField& source,
+                OpenCL& opencl,
+                const direction cmpt=0
+            ) const;
 
             //- Solve with given field and rhs (in solveScalar precision).
             //  Default is to call solve routine
@@ -563,6 +572,14 @@ public:
                 const direction cmpt=0
             ) const = 0;
 
+            virtual void preconditionGPU
+            (
+                OpenCL& opencl,
+                solveScalarField& wA,
+                const solveScalarField& rA,
+                const direction cmpt=0
+            ) const;
+
             //- Return wT the transpose-matrix preconditioned form of
             //- residual rT.
             //  This is only required for preconditioning asymmetric matrices.
@@ -704,6 +721,19 @@ public:
                 const direction cmpt
             ) const;
 
+            void AmulGPU
+            (
+                OpenCL&,
+                solveScalarField&,
+                cl::Buffer&,
+                cl::Buffer&,
+                cl::Buffer&,
+                cl::Buffer&,
+                cl::Buffer&,
+                cl::Buffer&,
+                cl::Buffer&
+            ) const;
+
             //- Matrix transpose multiplication with updated interfaces.
             void Tmul
             (
@@ -712,6 +742,19 @@ public:
                 const FieldField<Field, scalar>&,
                 const lduInterfaceFieldPtrsList&,
                 const direction cmpt
+            ) const;
+
+            void TmulGPU
+            (
+                OpenCL&,
+                solveScalarField&,
+                cl::Buffer&,
+                cl::Buffer&,
+                cl::Buffer&,
+                cl::Buffer&,
+                cl::Buffer&,
+                cl::Buffer&,
+                cl::Buffer&
             ) const;
 
 

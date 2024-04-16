@@ -55,6 +55,7 @@ SourceFiles
 #define PBiCGStab_H
 
 #include "lduMatrix.H"
+#include "gpu.H"
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
@@ -118,6 +119,14 @@ public:
             const direction cmpt = 0
         ) const;
 
+        virtual solverPerformance scalarSolveGPU
+        (
+            solveScalarField& psi,
+            const solveScalarField& source,
+            OpenCL& opencl,
+            const direction cmpt = 0
+        ) const;
+
         //- Solve the matrix with this solver
         virtual solverPerformance solve
         (
@@ -125,6 +134,14 @@ public:
             const scalarField& source,
             const direction cmpt=0
         ) const;
+
+        virtual solverPerformance solveGPU
+        (
+            scalarField& psi,
+            const scalarField& source,
+            OpenCL& opencl,
+            const direction cmpt=0
+        ) const override;
 };
 
 

@@ -106,6 +106,56 @@ Foam::SolverPerformance<Type> Foam::fvMatrix<Type>::solveSegregatedOrCoupled
     }
 }
 
+template<class Type>
+Foam::SolverPerformance<Type> Foam::fvMatrix<Type>::solveSegregatedOrCoupledGPU
+(
+    const dictionary& solverControls,
+    OpenCL& opencl
+)
+{
+    word regionName;
+    if (psi_.mesh().name() != polyMesh::defaultRegion)
+    {
+        regionName = psi_.mesh().name() + "::";
+    }
+    addProfiling(solve, "fvMatrix::solve." + regionName + psi_.name());
+
+    if (debug)
+    {
+        Info.masterStream(this->mesh().comm())
+            << "fvMatrix<Type>::solveSegregatedOrCoupled"
+               "(const dictionary& solverControls) : "
+               "solving fvMatrix<Type>"
+            << endl;
+    }
+
+    // Do not solve if maxIter == 0
+    if (solverControls.getOrDefault<label>("maxIter", -1) == 0)
+    {
+        return SolverPerformance<Type>();
+    }
+
+    word type(solverControls.getOrDefault<word>("type", "segregated"));
+
+    if (type == "segregated")
+    {
+        return solveSegregatedGPU(solverControls, opencl);
+    }
+    else if (type == "coupled")
+    {
+        return solveCoupled(solverControls);
+    }
+    else
+    {
+        FatalIOErrorInFunction(solverControls)
+            << "Unknown type " << type
+            << "; currently supported solver types are segregated and coupled"
+            << exit(FatalIOError);
+
+        return SolverPerformance<Type>();
+    }
+}
+
 
 template<class Type>
 Foam::SolverPerformance<Type> Foam::fvMatrix<Type>::solveSegregated
@@ -358,6 +408,26 @@ Foam::SolverPerformance<Type> Foam::fvMatrix<Type>::solve()
 {
     return this->solve(solverDict());
 }
+
+template<class Type>
+Foam::SolverPerformance<Type> Foam::fvMatrix<Type>::solveGPU
+(
+    OpenCL& opencl
+)
+{
+    return this->solveGPU(solverDict(), opencl);
+}
+
+template<class Type>
+Foam::SolverPerformance<Type> Foam::fvMatrix<Type>::solveGPU
+(
+    const dictionary& solverControls,
+    OpenCL& opencl
+)
+{
+    return psi_.mesh().solveGPU(*this, opencl, solverControls);
+}
+
 
 
 template<class Type>

@@ -72,8 +72,9 @@ endif
 
 # These are set by Make/options
 EXE_INC         =
-EXE_LIBS        =
-LIB_LIBS        =
+EXE_LIBS        = -lOpenCL
+LIB_LIBS        = -lOpenCL
+SYS_LIBS 		+= -lOpenCL
 
 # Project include/libraries
 PROJECT_INC     = \

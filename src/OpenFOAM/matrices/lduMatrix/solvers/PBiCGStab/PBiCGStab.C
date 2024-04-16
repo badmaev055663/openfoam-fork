@@ -281,6 +281,24 @@ Foam::solverPerformance Foam::PBiCGStab::scalarSolve
     return solverPerf;
 }
 
+Foam::solverPerformance Foam::PBiCGStab::scalarSolveGPU
+(
+    solveScalarField& psi,
+    const solveScalarField& source,
+    OpenCL& opencl,
+    const direction cmpt
+) const
+{
+    // --- Setup class containing solver performance data
+    solverPerformance solverPerf
+    (
+        lduMatrix::preconditioner::getName(controlDict_) + typeName,
+        fieldName_
+    );
+    // stub
+    return solverPerf;
+}
+
 
 Foam::solverPerformance Foam::PBiCGStab::solve
 (
@@ -294,6 +312,24 @@ Foam::solverPerformance Foam::PBiCGStab::solve
     (
         tpsi.ref(),
         ConstPrecisionAdaptor<solveScalar, scalar>(source)(),
+        cmpt
+    );
+}
+
+Foam::solverPerformance Foam::PBiCGStab::solveGPU
+(
+    scalarField& psi_s,
+    const scalarField& source,
+    OpenCL& opencl,
+    const direction cmpt
+) const
+{
+    PrecisionAdaptor<solveScalar, scalar> tpsi(psi_s);
+    return scalarSolveGPU
+    (
+        tpsi.ref(),
+        ConstPrecisionAdaptor<solveScalar, scalar>(source)(),
+        opencl,
         cmpt
     );
 }

@@ -145,5 +145,17 @@ Foam::lduMatrix::preconditioner::New
     return nullptr;
 }
 
+void Foam::lduMatrix::preconditioner::preconditionGPU
+(
+    OpenCL& opencl,
+    solveScalarField& wA,
+    const solveScalarField& rA,
+    const direction cmpt
+) const
+{
+    // stub to avoid pure virtual function
+}
+
+
 
 // ************************************************************************* //

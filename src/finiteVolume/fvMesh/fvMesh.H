@@ -68,6 +68,8 @@ SourceFiles
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
+#include "gpu.H"
+
 namespace Foam
 {
 
@@ -400,6 +402,13 @@ public:
                 virtual SolverPerformance<scalar> solve
                 (
                     fvMatrix<scalar>&,
+                    const dictionary&
+                ) const;
+
+                virtual SolverPerformance<scalar> solveGPU
+                (
+                    fvMatrix<scalar>&,
+                    OpenCL& opencl,
                     const dictionary&
                 ) const;
 

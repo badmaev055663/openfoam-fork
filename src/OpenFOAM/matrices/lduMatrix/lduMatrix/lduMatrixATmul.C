@@ -31,7 +31,6 @@ Description
 \*---------------------------------------------------------------------------*/
 
 #include "lduMatrix.H"
-
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 void Foam::lduMatrix::Amul
@@ -70,6 +69,7 @@ void Foam::lduMatrix::Amul
     );
 
     const label nCells = diag().size();
+
     for (label cell=0; cell<nCells; cell++)
     {
         ApsiPtr[cell] = diagPtr[cell]*psiPtr[cell];
@@ -99,6 +99,49 @@ void Foam::lduMatrix::Amul
     tpsi.clear();
 }
 
+void Foam::lduMatrix::AmulGPU
+(
+    OpenCL& opencl,
+    solveScalarField& Apsi,
+    cl::Buffer& Apsi_buf,
+    cl::Buffer& psi_buf,
+    cl::Buffer& diag_buf,
+    cl::Buffer& lower_buf,
+    cl::Buffer& upper_buf,
+    cl::Buffer& l_buf,
+    cl::Buffer& u_buf
+) const
+{
+    solveScalar* __restrict__ ApsiPtr = Apsi.begin();
+    cl::Kernel multKernel(opencl.program, "mult");
+    cl::Kernel lduKernel(opencl.program, "lduMul");
+
+    const label nCells = diag().size();
+    const int locSz = 128;
+
+    multKernel.setArg(0, diag_buf);
+    multKernel.setArg(1, psi_buf);
+    multKernel.setArg(2, Apsi_buf);
+    multKernel.setArg(3, nCells);
+    opencl.queue.enqueueNDRangeKernel(multKernel, cl::NullRange,
+                                cl::NDRange(nCells - nCells % locSz), cl::NDRange(locSz));
+    opencl.queue.finish(); // fake read
+    opencl.queue.enqueueReadBuffer(Apsi_buf, false, 0, sizeof(double), ApsiPtr);
+
+    const label nFaces = upper().size();
+
+    lduKernel.setArg(0, Apsi_buf);
+    lduKernel.setArg(1, psi_buf);
+    lduKernel.setArg(2, lower_buf);
+    lduKernel.setArg(3, upper_buf);
+    lduKernel.setArg(4, l_buf);
+    lduKernel.setArg(5, u_buf);
+    lduKernel.setArg(6, nFaces);
+    opencl.queue.enqueueNDRangeKernel(lduKernel, cl::NullRange,
+                                cl::NDRange(nFaces - nFaces % locSz), cl::NDRange(locSz));
+    // fake read
+    opencl.queue.enqueueReadBuffer(Apsi_buf, false, 0, sizeof(double), ApsiPtr);
+}
 
 void Foam::lduMatrix::Tmul
 (
@@ -161,6 +204,50 @@ void Foam::lduMatrix::Tmul
     );
 
     tpsi.clear();
+}
+
+void Foam::lduMatrix::TmulGPU
+(
+    OpenCL& opencl,
+    solveScalarField& Tpsi,
+    cl::Buffer& Tpsi_buf,
+    cl::Buffer& psi_buf,
+    cl::Buffer& diag_buf,
+    cl::Buffer& lower_buf,
+    cl::Buffer& upper_buf,
+    cl::Buffer& l_buf,
+    cl::Buffer& u_buf
+) const
+{
+    solveScalar* __restrict__ TpsiPtr = Tpsi.begin();
+    cl::Kernel multKernel(opencl.program, "mult");
+    cl::Kernel lduKernel(opencl.program, "lduMul");
+
+    const label nCells = diag().size();
+    const int locSz = 128;
+
+    multKernel.setArg(0, diag_buf);
+    multKernel.setArg(1, psi_buf);
+    multKernel.setArg(2, Tpsi_buf);
+    multKernel.setArg(3, nCells);
+    opencl.queue.enqueueNDRangeKernel(multKernel, cl::NullRange,
+                                cl::NDRange(nCells - nCells % locSz), cl::NDRange(locSz));
+    opencl.queue.finish(); // fake read
+    opencl.queue.enqueueReadBuffer(Tpsi_buf, false, 0, sizeof(double), TpsiPtr);
+
+    const label nFaces = upper().size();
+
+    lduKernel.setArg(0, Tpsi_buf);
+    lduKernel.setArg(1, psi_buf);
+    lduKernel.setArg(2, upper_buf);
+    lduKernel.setArg(3, lower_buf);
+    lduKernel.setArg(4, l_buf);
+    lduKernel.setArg(5, u_buf);
+    lduKernel.setArg(6, nFaces);
+    opencl.queue.enqueueNDRangeKernel(lduKernel, cl::NullRange,
+                                cl::NDRange(nFaces - nFaces % locSz), cl::NDRange(locSz));
+    // fake read
+    opencl.queue.enqueueReadBuffer(Tpsi_buf, false, 0, sizeof(double), TpsiPtr);
 }
 
 

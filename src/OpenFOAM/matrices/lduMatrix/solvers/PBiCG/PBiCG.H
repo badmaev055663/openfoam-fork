@@ -102,6 +102,13 @@ public:
             const scalarField& source,
             const direction cmpt=0
         ) const;
+        virtual solverPerformance solveGPU
+        (
+            scalarField& psi,
+            const scalarField& source,
+            OpenCL& opencl,
+            const direction cmpt=0
+        ) const;
 };
 
 

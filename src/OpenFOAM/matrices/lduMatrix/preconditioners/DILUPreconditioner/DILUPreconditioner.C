@@ -138,6 +138,17 @@ void Foam::DILUPreconditioner::precondition
     }
 }
 
+void Foam::DILUPreconditioner::preconditionGPU
+(
+    OpenCL& opencl,
+    solveScalarField& wA,
+    const solveScalarField& rA,
+    const direction
+) const
+{
+    // not implemented
+}
+
 
 void Foam::DILUPreconditioner::preconditionT
 (
