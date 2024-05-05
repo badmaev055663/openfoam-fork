@@ -1,8 +1,13 @@
 #!/bin/sh
 cd "${0%/*}" || exit                                # Run from this directory
-. ${WM_PROJECT_DIR:?}/bin/tools/CleanFunctions      # Tutorial clean functions
+. ${WM_PROJECT_DIR:?}/bin/tools/RunFunctions        # Tutorial run functions
 #------------------------------------------------------------------------------
+restore0Dir
 
-cleanCase0
-blockMesh
+runApplication decomposePar
+
+runParallel $(getApplication)
+
+runApplication reconstructPar
+
 #------------------------------------------------------------------------------
